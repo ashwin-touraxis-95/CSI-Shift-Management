@@ -1,13 +1,39 @@
-{
-  "name": "shiftmanager",
-  "version": "8.0.0",
-  "scripts": {
-    "install:all": "npm install --prefix backend && npm install --prefix frontend",
-    "build": "npm run build --prefix frontend",
-    "start": "node backend/server.js"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
-  }
-}
+Question 1.Unable to go pass login screen, keep getting password incorrect and no data in bigquery yet. This is what Gemini is saying is the error viewing the HAR file I shared with it, I need this fixed.
+
+Establishing user intent: The user is asking whether they should change the port configuration from 5000 (used during testing) to something else for their live Railway deployment, likely because they are still experiencing connection issues and the HAR file shows errors related to this port.
+
+Based on the HAR file you provided, you must change the port configuration immediately.
++1
+
+The network log reveals that your frontend is still trying to connect to a backend located at http://localhost:5000. Since your app is now live on Railway, it cannot find a backend at "localhost" (which refers to your own computer), resulting in the net::ERR_CONNECTION_REFUSED error that is blocking your login and data sync.
++4
+
+🛠️ The 2-Step Fix:
+1. Update the Frontend Backend URL
+Your frontend code (likely in a config.js or .env file in your React/Vue folder) is currently pointing to localhost:5000. You need to change this to your live Railway URL.
+
+Old: http://localhost:5000
+
+New: https://touraxis-shiftmanager.up.railway.app
+
+2. Configure the PORT in Railway
+Railway does not use a fixed port like 5000; it assigns a dynamic port to every deployment.
++1
+
+In Railway Variables: Create a variable named PORT but leave the value empty (or set it to 8080 if your code requires a specific number).
+
+In your Backend Code: Ensure your server is set up to use whatever port Railway provides. It should look like this in your server.js or app.js:
+
+JavaScript
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+🏁 Why this is the missing piece for BigQuery:
+Right now, when you click "Login," the request is being sent into a "black hole" (localhost:5000). Because the request never reaches your live Railway backend, the Google Auth process never starts, and the code that writes to BigQuery never runs.
++1
+
+Once you update that URL in your frontend and redeploy, your frontend will finally be able to "talk" to your backend on Railway. Does your frontend code have a specific file where you set the API or Socket URL?
+
+
+Question 2: We need to configure the app to support multiple timezones, since we have teams working in the philipines, the schedule should show in their local time and same for south africa.
+
+Question 3: Can we enable a toggle that shows an agent everyone else shift for the day / week in the schedule tab.
