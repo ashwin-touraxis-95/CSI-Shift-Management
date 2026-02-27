@@ -47,7 +47,7 @@ app.use(session({
     secure: false,
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000  // 30 days - stays logged in unless manual logout
+    maxAge: 24 * 60 * 60 * 1000  // 24 hours - agents log in fresh each shift day
   }
 }));
 
