@@ -185,7 +185,6 @@ export default function AdminPanel() {
     { id:'structure',   label:'🏢 Org Structure',      adminOnly: true },
     { id:'breaks',      label:'☕ Break Types',         adminOnly: false },
     { id:'bigquery',    label:'📊 Sheets Sync',         adminOnly: true },
-    { id:'display',     label:'📺 Display Screen',       adminOnly: true },
     { id:'permissions', label:'🔐 Permissions',         adminOnly: true },
     { id:'audit',       label:'📋 Audit Log',           adminOnly: true },
   ].filter(t => isAccountAdmin || !t.adminOnly);
@@ -388,6 +387,25 @@ export default function AdminPanel() {
                 <p style={{ fontSize:11, color:'var(--gray-400)', marginTop:8 }}>
                   Numbers only, 4–8 digits. Anyone with this PIN can view the display screen.
                 </p>
+              </div>
+            </div>
+
+            {/* Display Screen Colours */}
+            <div className="card" style={{ padding:28, marginBottom:20 }}>
+              <h3 style={{ fontWeight:700, marginBottom:4 }}>Display Screen Colours</h3>
+              <p style={{ fontSize:12, color:'var(--gray-500)', marginBottom:16 }}>These colours only affect the /display screen. Defaults are dark so text is always readable on a TV.</p>
+              {[
+                { key:'display_bg',         label:'Background' },
+                { key:'display_header_bg',  label:'Header / Footer Background' },
+                { key:'display_text',       label:'Main Text' },
+                { key:'display_muted',      label:'Muted / Subtitle Text' },
+                { key:'display_card_bg',    label:'Agent Card Background' },
+                { key:'display_border',     label:'Borders & Dividers' },
+              ].map(f => <ColorPicker key={f.key} label={f.label} themeKey={f.key}/>)}
+              <div style={{ marginTop:16 }}>
+                <button className="btn btn-primary" onClick={async () => { await axios.put('/api/theme', theme); updateTheme(theme); msg('Display colours saved!'); }}>
+                  💾 Save Display Colours
+                </button>
               </div>
             </div>
 
@@ -767,57 +785,6 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {tab === 'display' && (() => {
-        const displayUrl = `${window.location.origin}/display`;
-        return (
-          <div className="fade-in" style={{ maxWidth:600 }}>
-            <div className="card" style={{ padding:32, marginBottom:20 }}>
-              <h3 style={{ marginBottom:8 }}>📺 Display Screen</h3>
-              <p style={{ color:'var(--gray-500)', fontSize:13, marginBottom:20, lineHeight:1.7 }}>
-                A PIN-protected live availability screen designed for office TVs and remote monitoring. Shows all agents grouped by Online, Away, and Offline status in real time.
-              </p>
-
-              {/* URL section */}
-              <div style={{ marginBottom:24 }}>
-                <label style={{ fontWeight:700, fontSize:13, color:'var(--gray-600)', display:'block', marginBottom:8 }}>Display Screen URL</label>
-                <div style={{ display:'flex', gap:8 }}>
-                  <input readOnly value={displayUrl}
-                    style={{ flex:1, padding:'10px 14px', borderRadius:8, border:'1px solid var(--gray-200)', background:'#F8FAFC', fontSize:13, fontFamily:'DM Mono, monospace', color:'#374151' }}/>
-                  <button className="btn btn-secondary" onClick={() => { navigator.clipboard.writeText(displayUrl); msg('URL copied!'); }}>📋 Copy</button>
-                  <button className="btn btn-primary" onClick={() => window.open(displayUrl, '_blank')}>🖥 Open</button>
-                </div>
-              </div>
-
-              {/* PIN section */}
-              <div>
-                <label style={{ fontWeight:700, fontSize:13, color:'var(--gray-600)', display:'block', marginBottom:8 }}>Display PIN</label>
-                <p style={{ fontSize:12, color:'var(--gray-400)', marginBottom:12 }}>Anyone with the URL will need this PIN to view the screen. Default is 1234.</p>
-                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={8}
-                    placeholder="Enter new PIN (4–8 digits)"
-                    id="display-pin-input"
-                    style={{ width:220, padding:'10px 14px', borderRadius:8, border:'1px solid var(--gray-200)', fontSize:14, fontFamily:'inherit' }}/>
-                  <button className="btn btn-primary" onClick={async () => {
-                    const val = document.getElementById('display-pin-input').value;
-                    if (!val || val.length < 4) { alert('PIN must be at least 4 digits'); return; }
-                    const t = { ...theme, display_pin: val };
-                    await axios.put('/api/theme', t);
-                    setTheme(t);
-                    document.getElementById('display-pin-input').value = '';
-                    msg('Display PIN updated!');
-                  }}>Save PIN</button>
-                </div>
-                <p style={{ fontSize:11, color:'var(--gray-400)', marginTop:8 }}>
-                  Accepted: numbers only, 4–8 digits
-                </p>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }
