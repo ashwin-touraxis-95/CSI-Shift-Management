@@ -224,24 +224,6 @@ app.post('/api/display/verify-pin', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/display/availability', async (req, res) => {
-  try {
-    const r = await pool.query(`
-      SELECT u.id, u.name, u.avatar, u.department,
-        CASE WHEN cl.id IS NOT NULL AND cl.clock_out IS NULL THEN
-          CASE WHEN bl.id IS NOT NULL AND bl.ended_at IS NULL THEN 'on_break' ELSE 'available' END
-        ELSE 'offline' END as status,
-        bl.break_type_name, bl.break_type_icon, bl.break_type_color, bl.started_at as break_started_at
-      FROM users u
-      LEFT JOIN clock_logs cl ON cl.user_id = u.id AND cl.date = CURRENT_DATE AND cl.clock_out IS NULL
-      LEFT JOIN break_logs bl ON bl.user_id = u.id AND bl.date = CURRENT_DATE AND bl.ended_at IS NULL
-      WHERE u.active = 1 AND u.user_type = 'agent'
-      ORDER BY u.name
-    `);
-    res.json(r.rows);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // ── DISPLAY SCREEN ──
 app.post('/api/display/verify-pin', async (req, res) => {
   try {
@@ -255,32 +237,26 @@ app.post('/api/display/verify-pin', async (req, res) => {
 
 app.get('/api/display/availability', async (req, res) => {
   try {
-    const r = await pool.query(`
-      SELECT u.id, u.name, u.department, u.avatar,
-        cs.status,
-        bl.break_type_id, bt.name as break_type_name, bt.color as break_type_color, bt.icon as break_type_icon,
-        bl.started_at as break_started_at
+    const today = new Date().toISOString().split('T')[0];
+    const users = await all(`
+      SELECT u.id, u.name, u.avatar, u.department,
+        a.status, a.break_type_name, a.break_type_icon, a.break_type_color
       FROM users u
-      LEFT JOIN (
-        SELECT DISTINCT ON (user_id) user_id,
-          CASE WHEN clock_out IS NULL THEN 'available' ELSE 'offline' END as status
-        FROM clock_logs WHERE date = CURRENT_DATE ORDER BY user_id, clock_in DESC
-      ) cs ON cs.user_id = u.id
-      LEFT JOIN (
-        SELECT DISTINCT ON (user_id) user_id, break_type_id, started_at
-        FROM break_logs WHERE date = CURRENT_DATE AND ended_at IS NULL ORDER BY user_id, started_at DESC
-      ) bl ON bl.user_id = u.id
-      LEFT JOIN break_types bt ON bt.id = bl.break_type_id
+      LEFT JOIN availability a ON u.id = a.user_id
       WHERE u.active = 1 AND u.user_type = 'agent'
       ORDER BY u.name
     `);
-    const rows = r.rows.map(u => ({
-      ...u,
-      status: u.break_type_id ? 'on_break' : (u.status || 'offline')
+    const result = await Promise.all(users.map(async u => {
+      if (u.status === 'on_break') {
+        const bl = await get('SELECT started_at FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL', [u.id, today]);
+        return { ...u, break_started_at: bl ? bl.started_at : null };
+      }
+      return u;
     }));
-    res.json(rows);
-  } catch (e) { res.status(500).json([]); }
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 app.put('/api/theme', requireAdmin, async (req, res) => {
   for (const [k,v] of Object.entries(req.body)) {
     if (await get('SELECT key FROM theme WHERE key=$1',[k])) await run('UPDATE theme SET value=$1 WHERE key=$2',[JSON.stringify(v),k]);
