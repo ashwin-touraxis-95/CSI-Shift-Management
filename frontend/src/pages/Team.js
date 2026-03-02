@@ -235,7 +235,8 @@ export default function Team() {
               const isEditing = editing?.id===user.id;
               const cur = isEditing ? editing : user;
               return (
-                <tr key={user.id} style={{ borderBottom:'1px solid var(--gray-100)',background:isEditing?'#fffbeb':'white',opacity:user.active===0?0.65:1 }}>
+                <React.Fragment key={user.id}>
+                <tr style={{ borderBottom:'1px solid var(--gray-100)',background:isEditing?'#fffbeb':'white',opacity:user.active===0?0.65:1 }}>
                   <td style={{ padding:'12px 16px' }}>
                     <div style={{ display:'flex',alignItems:'center',gap:10 }}>
                       {user.avatar ? <img src={user.avatar} alt="" style={{ width:34,height:34,borderRadius:'50%' }}/>
@@ -302,6 +303,7 @@ export default function Team() {
                     </td>
                   </tr>
                 )}
+                </React.Fragment>
               );
             })}
           </tbody>
