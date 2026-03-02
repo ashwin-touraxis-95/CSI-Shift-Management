@@ -64,6 +64,12 @@ async function getPermissions(userType) {
   try { return JSON.parse(row.permissions); } catch { return {}; }
 }
 async function getUser(id) { return await get('SELECT * FROM users WHERE id=$1', [id]); }
+
+// Returns today's date in SAST (UTC+2) as 'YYYY-MM-DD'
+function todaySAST() {
+  const d = new Date(new Date().getTime() + 2 * 60 * 60 * 1000);
+  return d.toISOString().split('T')[0];
+}
 async function getTheme() {
   const rows = await all('SELECT key,value FROM theme');
   const t = {}; rows.forEach(r => { try { t[r.key] = JSON.parse(r.value); } catch { t[r.key] = r.value; } });
@@ -245,7 +251,7 @@ app.post('/api/display/verify-pin', async (req, res) => {
 
 app.get('/api/display/availability', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todaySAST();
     const users = await all(`
       SELECT u.id, u.name, u.avatar, u.department,
         a.status, a.break_type_name, a.break_type_icon, a.break_type_color
@@ -276,7 +282,7 @@ app.put('/api/theme', requireAdmin, async (req, res) => {
 
 // ── CLOCK ─────────────────────────────────────────────────────────────────────
 app.post('/api/clock/in', requireAuth, async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   if (await get("SELECT id FROM clock_logs WHERE user_id=$1 AND date=$2 AND clock_out IS NULL",[req.session.userId,today]))
     return res.status(400).json({ error: 'Already clocked in' });
   await run("INSERT INTO clock_logs(id,user_id,clock_in,date,ip_address) VALUES($1,$2,NOW(),$3,$4)",[uuidv4(),req.session.userId,today,req.ip||'unknown']);
@@ -285,7 +291,7 @@ app.post('/api/clock/in', requireAuth, async (req, res) => {
   res.json({ ok: true, message: 'Clocked in successfully' });
 });
 app.post('/api/clock/out', requireAuth, async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const open = await get("SELECT id FROM clock_logs WHERE user_id=$1 AND date=$2 AND clock_out IS NULL",[req.session.userId,today]);
   if (!open) return res.status(400).json({ error: 'Not clocked in' });
   await run("UPDATE clock_logs SET clock_out=NOW() WHERE id=$1",[open.id]);
@@ -294,14 +300,14 @@ app.post('/api/clock/out', requireAuth, async (req, res) => {
   res.json({ ok: true, message: 'Clocked out successfully' });
 });
 app.get('/api/clock/status', requireAuth, async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const log = await get("SELECT * FROM clock_logs WHERE user_id=$1 AND date=$2 AND clock_out IS NULL",[req.session.userId,today]);
   res.json({ clockedIn: !!log, log });
 });
 
 // ── AVAILABILITY ──────────────────────────────────────────────────────────────
 app.get('/api/availability', requireAuth, async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const users = await all(`SELECT u.id,u.name,u.email,u.avatar,u.department,u.user_type,
     a.status,a.clocked_in_at,a.last_updated,
     a.break_type_id,a.break_type_name,a.break_type_icon,a.break_type_color
@@ -388,6 +394,16 @@ app.delete('/api/job-roles/:id/leaders', requireAuth, canManageUsers, async (req
   await run('DELETE FROM job_role_leaders WHERE job_role_id=$1 AND leader_id=$2',[req.params.id,req.body.leader_id]);
   res.json({ ok: true });
 });
+app.get('/api/users/:id/job-roles', requireAuth, canManageUsers, async (req, res) => {
+  const roles = await all(`SELECT jr.id, jr.name, d.name as department_name FROM job_roles jr JOIN agent_job_roles ajr ON jr.id=ajr.job_role_id JOIN departments d ON jr.department_id=d.id WHERE ajr.agent_id=$1 AND jr.active=1`,[req.params.id]);
+  res.json(roles);
+});
+
+app.post('/api/users/:id/set-onboarded', requireAuth, canManageUsers, async (req, res) => {
+  await run('UPDATE users SET onboarded=1 WHERE id=$1',[req.params.id]);
+  res.json({ ok: true });
+});
+
 app.post('/api/job-roles/:id/agents', requireAuth, canManageUsers, async (req, res) => {
   const { agent_id } = req.body;
   try { await run('INSERT INTO agent_job_roles(agent_id,job_role_id) VALUES($1,$2)',[agent_id,req.params.id]); } catch(e) {}
@@ -570,8 +586,9 @@ app.get('/api/logs', requireAuth, requirePerm('view_clock_logs'), async (req, re
   let q = `SELECT cl.*,u.name,u.email,u.department FROM clock_logs cl JOIN users u ON cl.user_id=u.id WHERE 1=1`;
   const p = [];
   if (req.user.user_type==='team_leader'&&req.perms?.view_own_logs_only) {
-    const ids = await all('SELECT agent_id FROM team_leader_agents WHERE leader_id=$1',[req.user.id]).map(r=>r.agent_id);
-    if (ids.length) { q+=` AND cl.user_id IN (${ids.map(()=>'$1').join(',')}) `; p.push(...ids); }
+    const rows = await all('SELECT agent_id FROM team_leader_agents WHERE leader_id=$1',[req.user.id]);
+    const ids = rows.map(r=>r.agent_id);
+    if (ids.length) { q+=` AND cl.user_id IN (${ids.map((_,i)=>`$${p.length+i+1}`).join(',')}) `; p.push(...ids); }
     else q+=` AND 1=0`;
   }
   if (date) { q+=` AND cl.date=$1`; p.push(date); }
@@ -718,7 +735,7 @@ app.post('/api/breaks/start', requireAuth, async (req, res) => {
   const userId = req.session.userId;
 
   // Must be clocked in
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const clockedIn = await get("SELECT id FROM clock_logs WHERE user_id=$1 AND date=$2 AND clock_out IS NULL", [userId, today]);
   if (!clockedIn) return res.status(400).json({ error: 'You must be clocked in to take a break' });
 
@@ -742,7 +759,7 @@ app.post('/api/breaks/start', requireAuth, async (req, res) => {
 
 app.post('/api/breaks/end', requireAuth, async (req, res) => {
   const userId = req.session.userId;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
 
   const openBreak = await get("SELECT * FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL", [userId, today]);
   if (!openBreak) return res.status(400).json({ error: 'No active break found' });
@@ -759,7 +776,7 @@ app.post('/api/breaks/end', requireAuth, async (req, res) => {
 });
 
 app.get('/api/breaks/status', requireAuth, async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const openBreak = await get("SELECT * FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL", [req.session.userId, today]);
   const todayBreaks = await all("SELECT * FROM break_logs WHERE user_id=$1 AND date=$2 ORDER BY started_at", [req.session.userId, today]);
   res.json({ onBreak: !!openBreak, currentBreak: openBreak, todayBreaks });
@@ -772,8 +789,9 @@ app.get('/api/breaks/logs', requireAuth, async (req, res) => {
   let query = `SELECT bl.*,u.name,u.department FROM break_logs bl JOIN users u ON bl.user_id=u.id WHERE 1=1`;
   const params = [];
   if (u.user_type === 'team_leader') {
-    const agentIds = await all('SELECT agent_id FROM team_leader_agents WHERE leader_id=$1', [u.id]).map(r => r.agent_id);
-    if (agentIds.length) { query += ` AND bl.user_id IN (${agentIds.map(()=>'$1').join(',')}) `; params.push(...agentIds); }
+    const agentRows = await all('SELECT agent_id FROM team_leader_agents WHERE leader_id=$1', [u.id]);
+    const agentIds = agentRows.map(r => r.agent_id);
+    if (agentIds.length) { query += ` AND bl.user_id IN (${agentIds.map((_,i)=>`$${params.length+i+1}`).join(',')}) `; params.push(...agentIds); }
     else query += ` AND 1=0`;
   }
   if (date) { query += ` AND bl.date=$1`; params.push(date); }
@@ -787,7 +805,7 @@ app.post('/api/override/clock-in', requireAuth, async (req, res) => {
   const u = req.user;
   if (!['account_admin','manager','team_leader'].includes(u.user_type)) return res.status(403).json({ error: 'Permission denied' });
   const { user_id } = req.body;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const existing = await get("SELECT id FROM clock_logs WHERE user_id=$1 AND date=$2 AND clock_out IS NULL", [user_id, today]);
   if (existing) return res.status(400).json({ error: 'Agent is already clocked in' });
   await run("INSERT INTO clock_logs(id,user_id,clock_in,date,ip_address) VALUES($1,$2,NOW(),$3,$4)", [require('uuid').v4(), user_id, today, 'manager-override']);
@@ -800,7 +818,7 @@ app.post('/api/override/clock-out', requireAuth, async (req, res) => {
   const u = req.user;
   if (!['account_admin','manager','team_leader'].includes(u.user_type)) return res.status(403).json({ error: 'Permission denied' });
   const { user_id } = req.body;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   // End any open break first
   const openBreak = await get("SELECT id FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL", [user_id, today]);
   if (openBreak) {
@@ -820,7 +838,7 @@ app.post('/api/override/start-break', requireAuth, async (req, res) => {
   const u = req.user;
   if (!['account_admin','manager','team_leader'].includes(u.user_type)) return res.status(403).json({ error: 'Permission denied' });
   const { user_id, break_type_id } = req.body;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const clockedIn = await get("SELECT id FROM clock_logs WHERE user_id=$1 AND date=$2 AND clock_out IS NULL", [user_id, today]);
   if (!clockedIn) return res.status(400).json({ error: 'Agent must be clocked in first' });
   const onBreak = await get("SELECT id FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL", [user_id, today]);
@@ -843,7 +861,7 @@ app.post('/api/override/end-break', requireAuth, async (req, res) => {
   const u = req.user;
   if (!['account_admin','manager','team_leader'].includes(u.user_type)) return res.status(403).json({ error: 'Permission denied' });
   const { user_id } = req.body;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todaySAST();
   const openBreak = await get("SELECT * FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL", [user_id, today]);
   if (!openBreak) return res.status(400).json({ error: 'No active break found' });
   const durationMinutes = Math.round((new Date() - new Date(openBreak.started_at)) / 60000);

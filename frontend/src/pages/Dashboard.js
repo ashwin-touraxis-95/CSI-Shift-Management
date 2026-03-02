@@ -94,7 +94,7 @@ export default function Dashboard() {
   };
 
   const overrideAction = async (endpoint, body, successMsg) => {
-    try { await axios.post(endpoint, body); await fetchAll(); showMsg(successMsg); }
+    try { await axios.post(endpoint, body); await fetchAll(); showMsg(successMsg); setOpenOverride(null); }
     catch (e) { showMsg(e.response?.data?.error || 'Error', 'error'); }
   };
 

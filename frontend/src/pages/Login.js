@@ -15,6 +15,7 @@ const labelStyle = {
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState({});
@@ -120,7 +121,12 @@ export default function Login() {
               </div>
               <div style={{ marginBottom:20 }}>
                 <label style={labelStyle}>Password</label>
-                <input type="password" placeholder="Your password" value={password} onChange={e=>setPassword(e.target.value)} style={inputStyle}/>
+                <div style={{ position:'relative' }}>
+                  <input type={showPassword ? 'text' : 'password'} placeholder="Your password" value={password} onChange={e=>setPassword(e.target.value)} style={{ ...inputStyle, paddingRight:44 }}/>
+                  <button type="button" onClick={()=>setShowPassword(p=>!p)} style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.4)', fontSize:16, padding:0 }}>
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
               </div>
               {sessionExpired && (
                 <div style={{ background:'rgba(245,158,11,0.15)',border:'1px solid rgba(245,158,11,0.4)',borderRadius:8,padding:'10px 14px',color:'#fcd34d',fontSize:13,marginBottom:16 }}>

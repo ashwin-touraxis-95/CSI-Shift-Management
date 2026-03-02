@@ -11,6 +11,8 @@ export default function Team() {
   const [message, setMessage] = useState({ text:'', type:'success' });
   const [showInactive, setShowInactive] = useState(false);
   const [depts, setDepts] = useState([]);
+  const [jobRoles, setJobRoles] = useState([]);
+  const [agentRoles, setAgentRoles] = useState({}); // { userId: [roleId, ...] }
   const [tempPasswordModal, setTempPasswordModal] = useState(null); // { name, tempPassword }
 
   const isTeamLeader = me?.user_type === 'team_leader';
@@ -27,7 +29,7 @@ export default function Team() {
     ];
   };
 
-  useEffect(() => { fetchUsers(); fetchDepts(); }, []);
+  useEffect(() => { fetchUsers(); fetchDepts(); fetchJobRoles(); }, []);
 
   const fetchUsers = async () => {
     try {
@@ -44,6 +46,35 @@ export default function Team() {
   const fetchDepts = async () => {
     try { const r = await axios.get('/api/departments'); setDepts(Array.isArray(r.data) ? r.data.map(d=>d.name) : []); }
     catch { setDepts(['CS','Sales','Travel Agents','Trainees','Management']); }
+  };
+
+  const fetchJobRoles = async () => {
+    try {
+      const r = await axios.get('/api/job-roles');
+      setJobRoles(Array.isArray(r.data) ? r.data : []);
+    } catch {}
+  };
+
+  const fetchAgentRoles = async (userId) => {
+    try {
+      const r = await axios.get(`/api/users/${userId}/job-roles`);
+      const roleIds = Array.isArray(r.data) ? r.data.map(jr => jr.id) : [];
+      setAgentRoles(prev => ({ ...prev, [userId]: roleIds }));
+      return roleIds;
+    } catch { return []; }
+  };
+
+  const handleToggleAgentRole = async (userId, roleId, currentRoles) => {
+    const hasRole = currentRoles.includes(roleId);
+    try {
+      if (hasRole) {
+        await axios.delete(`/api/job-roles/${roleId}/agents`, { data: { agent_id: userId } });
+      } else {
+        await axios.post(`/api/job-roles/${roleId}/agents`, { agent_id: userId });
+        await axios.post(`/api/users/${userId}/set-onboarded`).catch(() => {});
+      }
+      await fetchAgentRoles(userId);
+    } catch(e) { msg(e.response?.data?.error || 'Error updating role', 'error'); }
   };
 
   const msg = (text, type='success') => { setMessage({text,type}); setTimeout(()=>setMessage({text:'',type:'success'}),4000); };
@@ -238,7 +269,7 @@ export default function Team() {
                       </div>
                     ) : (
                       <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={()=>setEditing({...user})}>Edit</button>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{ setEditing({...user}); fetchAgentRoles(user.id); }}>Edit</button>
                         <button className="btn btn-secondary btn-sm" onClick={()=>handleResetPassword(user)} title="Reset password">🔑 Reset</button>
                         {user.active!==0
                           ? <button className="btn btn-warning btn-sm" onClick={()=>handleSetActive(user.id,false)}>Deactivate</button>
@@ -248,6 +279,29 @@ export default function Team() {
                     )}
                   </td>
                 </tr>
+                {isEditing && cur.user_type === 'agent' && (
+                  <tr key={`roles-${user.id}`}>
+                    <td colSpan={6} style={{ padding:'0 16px 16px', background:'#fffbeb', borderBottom:'1px solid var(--gray-100)' }}>
+                      <div style={{ padding:'14px 16px', background:'white', borderRadius:10, border:'1px solid var(--gray-200)' }}>
+                        <div style={{ fontWeight:700, fontSize:13, marginBottom:10, color:'var(--gray-700)' }}>🎯 Job Roles</div>
+                        {jobRoles.filter(jr => jr.department_name === cur.department).length === 0
+                          ? <p style={{ fontSize:13, color:'var(--gray-400)', margin:0 }}>No job roles found for {cur.department}. Add roles in Org Structure.</p>
+                          : <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                              {jobRoles.filter(jr => jr.department_name === cur.department).map(jr => {
+                                const assigned = (agentRoles[user.id] || []).includes(jr.id);
+                                return (
+                                  <button key={jr.id} onClick={() => handleToggleAgentRole(user.id, jr.id, agentRoles[user.id] || [])}
+                                    style={{ padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:600, cursor:'pointer', border:`1.5px solid ${assigned ? 'var(--red)' : 'var(--gray-300)'}`, background: assigned ? '#fef2f2' : 'white', color: assigned ? 'var(--red)' : 'var(--gray-600)', transition:'all 0.15s' }}>
+                                    {assigned ? '✓ ' : '+ '}{jr.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                )}
               );
             })}
           </tbody>
