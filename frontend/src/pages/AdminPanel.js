@@ -182,7 +182,7 @@ export default function AdminPanel() {
   const tabs = [
     { id:'theme',       label:'🎨 Theme & Branding',  adminOnly: true },
     { id:'display',     label:'📺 Display Screen',     adminOnly: true },
-    { id:'structure',   label:'🏢 Org Structure',      adminOnly: true },
+    { id:'structure',   label:'🏢 Org Structure',      adminOnly: false },
     { id:'breaks',      label:'☕ Break Types',         adminOnly: false },
     { id:'bigquery',    label:'📊 Sheets Sync',         adminOnly: true },
     { id:'permissions', label:'🔐 Permissions',         adminOnly: true },
