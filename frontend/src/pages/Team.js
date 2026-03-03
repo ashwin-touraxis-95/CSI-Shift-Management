@@ -7,7 +7,7 @@ export default function Team() {
   const [users, setUsers] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [newUser, setNewUser] = useState({ name:'', email:'', user_type:'agent', department:'CS', timezone:'Africa/Johannesburg' });
+  const [newUser, setNewUser] = useState({ name:'', email:'', user_type:'agent', department:'CS', timezone:'Africa/Johannesburg', jobRoleId:'' });
   const [message, setMessage] = useState({ text:'', type:'success' });
   const [showInactive, setShowInactive] = useState(false);
   const [depts, setDepts] = useState([]);
@@ -85,8 +85,12 @@ export default function Team() {
       if (r.data.temp_password) {
         setTempPasswordModal({ name: newUser.name, email: newUser.email, tempPassword: r.data.temp_password, isNew: true });
       }
+      // Assign job role if selected
+      if (newUser.jobRoleId && r.data.id) {
+        await axios.post(`/api/job-roles/${newUser.jobRoleId}/agents`, { agent_id: r.data.id }).catch(()=>{});
+      }
       setShowAdd(false);
-      setNewUser({ name:'', email:'', user_type:'agent', department:'CS', timezone:'Africa/Johannesburg' });
+      setNewUser({ name:'', email:'', user_type:'agent', department:'CS', timezone:'Africa/Johannesburg', jobRoleId:'' });
       fetchUsers();
     } catch(e) { msg(e.response?.data?.error||'Error adding user','error'); }
   };
@@ -191,7 +195,7 @@ export default function Team() {
                 </select>
               </div>
               <div><label>Department</label>
-                <select value={newUser.department} onChange={e=>setNewUser(u=>({...u,department:e.target.value}))}>
+                <select value={newUser.department} onChange={e=>setNewUser(u=>({...u,department:e.target.value,jobRoleId:''}))}>
                   {depts.map(d=><option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
@@ -210,6 +214,17 @@ export default function Team() {
                   <option value="UTC">UTC</option>
                 </select>
               </div>
+              {newUser.user_type === 'agent' && (
+                <div>
+                  <label>Job Role <span style={{ fontWeight:400, color:'var(--gray-400)', fontSize:12 }}>(optional)</span></label>
+                  <select value={newUser.jobRoleId||''} onChange={e=>setNewUser(u=>({...u,jobRoleId:e.target.value}))}>
+                    <option value="">— No role assigned yet —</option>
+                    {jobRoles.filter(jr => jr.department_name === newUser.department).map(jr => (
+                      <option key={jr.id} value={jr.id}>{jr.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div style={{ background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#1e40af' }}>
                 💡 The user will be prompted to create their own password the first time they log in with this email address.
               </div>
