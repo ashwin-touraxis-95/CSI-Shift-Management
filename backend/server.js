@@ -311,10 +311,12 @@ app.get('/api/availability', requireAuth, async (req, res) => {
   const theme = await getTheme();
   // Build user_type filter from dashboard visibility settings
   const allowedTypes = [];
-  if (theme.dash_show_agents !== 'false' && theme.dash_show_agents !== false) allowedTypes.push('agent');
-  if (theme.dash_show_leaders !== 'false' && theme.dash_show_leaders !== false) allowedTypes.push('team_leader');
-  if (theme.dash_show_managers !== 'false' && theme.dash_show_managers !== false) allowedTypes.push('manager');
-  if (allowedTypes.length === 0) allowedTypes.push('agent'); // fallback: always show agents
+  // Agents: shown by default (opt-out)
+  if (theme.dash_show_agents !== false && theme.dash_show_agents !== 'false') allowedTypes.push('agent');
+  // Leaders + Managers: hidden by default (opt-in) — only show if explicitly set to true
+  if (theme.dash_show_leaders === true || theme.dash_show_leaders === 'true') allowedTypes.push('team_leader');
+  if (theme.dash_show_managers === true || theme.dash_show_managers === 'true') allowedTypes.push('manager');
+  if (allowedTypes.length === 0) allowedTypes.push('agent'); // fallback
   const placeholders = allowedTypes.map((_,i) => `$${i+1}`).join(',');
   const users = await all(`SELECT u.id,u.name,u.email,u.avatar,u.department,u.user_type,
     a.status,a.clocked_in_at,a.last_updated,
