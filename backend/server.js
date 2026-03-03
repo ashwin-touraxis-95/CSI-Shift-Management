@@ -308,12 +308,19 @@ app.get('/api/clock/status', requireAuth, async (req, res) => {
 // ── AVAILABILITY ──────────────────────────────────────────────────────────────
 app.get('/api/availability', requireAuth, async (req, res) => {
   const today = todaySAST();
+  const theme = await getTheme();
+  // Build user_type filter from dashboard visibility settings
+  const allowedTypes = [];
+  if (theme.dash_show_agents !== 'false' && theme.dash_show_agents !== false) allowedTypes.push('agent');
+  if (theme.dash_show_leaders !== 'false' && theme.dash_show_leaders !== false) allowedTypes.push('team_leader');
+  if (theme.dash_show_managers !== 'false' && theme.dash_show_managers !== false) allowedTypes.push('manager');
+  if (allowedTypes.length === 0) allowedTypes.push('agent'); // fallback: always show agents
+  const placeholders = allowedTypes.map((_,i) => `$${i+1}`).join(',');
   const users = await all(`SELECT u.id,u.name,u.email,u.avatar,u.department,u.user_type,
     a.status,a.clocked_in_at,a.last_updated,
     a.break_type_id,a.break_type_name,a.break_type_icon,a.break_type_color
     FROM users u LEFT JOIN availability a ON u.id=a.user_id
-    WHERE u.user_type NOT IN ('account_admin') AND u.active=1 ORDER BY u.department,u.name`);
-  // Attach current break start time for timer display
+    WHERE u.user_type IN (${placeholders}) AND u.active=1 ORDER BY u.department,u.name`, allowedTypes);
   const result = await Promise.all(users.map(async u => {
     if (u.status === 'on_break') {
       const bl = await get('SELECT started_at FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL', [u.id, today]);
@@ -681,6 +688,18 @@ initDb().then(async () => {
     if (!isProduction) console.log('   Frontend: http://localhost:3000');
   });
   
+  // Auto-close any open clock sessions at midnight SAST
+  cron.schedule('0 22 * * *', async () => { // midnight SAST (UTC+2)
+    const yesterday = new Date(new Date().getTime() + 2*60*60*1000 - 86400000).toISOString().split('T')[0];
+    const openSessions = await all("SELECT id FROM clock_logs WHERE date=$1 AND clock_out IS NULL", [yesterday]);
+    for (const s of openSessions) {
+      await run("UPDATE clock_logs SET clock_out=NOW() WHERE id=$1", [s.id]);
+    }
+    if (openSessions.length) console.log(`🕛 Auto-closed ${openSessions.length} open clock sessions from ${yesterday}`);
+    await run("UPDATE availability SET status='offline',break_type_id=NULL,break_type_name=NULL,break_type_icon=NULL,break_type_color=NULL,last_updated=NOW() WHERE status!='offline'");
+    io.emit('availability_update');
+  }, { timezone: 'UTC' });
+
   // Schedule Sheets sync - every hour automatically
   if (isProduction && process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     cron.schedule('0 22 * * *', async () => { // midnight SAST (UTC+2)

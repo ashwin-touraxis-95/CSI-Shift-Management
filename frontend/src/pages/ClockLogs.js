@@ -41,18 +41,18 @@ export default function ClockLogs() {
   };
 
   const formatTime = (dt) => {
-    if (!dt) return '\u2014';
+    if (!dt) return '—';
     const d = parseTS(dt);
-    if (!d) return '\u2014';
+    if (!d) return '—';
     return d.toLocaleTimeString('en-ZA', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
   };
 
   const calcDuration = (clockIn, clockOut) => {
-    if (!clockIn || !clockOut) return '\u2014';
+    if (!clockIn || !clockOut) return '—';
     const a = parseTS(clockIn), b = parseTS(clockOut);
-    if (!a || !b) return '\u2014';
+    if (!a || !b) return '—';
     const diff = b - a;
-    if (diff < 0) return '\u2014';
+    if (diff < 0) return '—';
     return Math.floor(diff/3600000) + 'h ' + Math.floor((diff%3600000)/60000) + 'm';
   };
 
@@ -63,14 +63,20 @@ export default function ClockLogs() {
     return acc + (b - a) / 3600000;
   }, 0);
 
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  // "Clocked In Now" = has a clock_in today with no clock_out AND is today's date
+  const clockedInNow = logs.filter(l => !l.clock_out && l.date === todayStr).length;
   const totalBreakMins = breakLogs.reduce((a, l) => a + (l.duration_minutes || 0), 0);
 
   return (
     <div>
       <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
-        <div><h1>Logs</h1><p>Management view \u2014 all activity records. Confidential.</p></div>
+        <div>
+          <h1>Logs</h1>
+          <p>Management view — all activity records. Confidential.</p>
+        </div>
         <div style={{ display:'flex', borderRadius:8, overflow:'hidden', border:'1.5px solid var(--gray-200)' }}>
-          {[{id:'clock',label:'\u{1F550} Clock Logs'},{id:'breaks',label:'\u2615 Breaks'}].map(t => (
+          {[{id:'clock',label:'Clock Logs'},{id:'breaks',label:'Breaks'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               padding:'8px 20px', border:'none', cursor:'pointer', fontWeight:600, fontSize:13,
               background: tab===t.id ? 'var(--red)' : 'white', color: tab===t.id ? 'white' : 'var(--gray-600)'
@@ -81,15 +87,15 @@ export default function ClockLogs() {
 
       {tab === 'clock' ? (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:24 }}>
-          <StatCard label="Total Entries" value={logs.length} icon="\u{1F4CB}" />
-          <StatCard label="Clocked In Now" value={logs.filter(l => !l.clock_out).length} icon="\u{1F7E2}" />
-          <StatCard label="Total Hours" value={totalHours.toFixed(1) + 'h'} icon="\u23F1" />
+          <StatCard label="Total Entries" value={logs.length} icon="&#128203;" />
+          <StatCard label="Clocked In Now" value={clockedInNow} icon="&#128994;" />
+          <StatCard label="Total Hours" value={totalHours.toFixed(1) + 'h'} icon="&#9201;" />
         </div>
       ) : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:24 }}>
-          <StatCard label="Total Entries" value={breakLogs.length} icon="\u2615" />
-          <StatCard label="On Break Now" value={breakLogs.filter(l => !l.ended_at).length} icon="\u{1F7E1}" />
-          <StatCard label="Total Break Time" value={totalBreakMins + 'm'} icon="\u23F1" />
+          <StatCard label="Total Entries" value={breakLogs.length} icon="&#9749;" />
+          <StatCard label="On Break Now" value={breakLogs.filter(l => !l.ended_at && l.date === todayStr).length} icon="&#128993;" />
+          <StatCard label="Total Break Time" value={totalBreakMins + 'm'} icon="&#9201;" />
         </div>
       )}
 
@@ -124,14 +130,15 @@ export default function ClockLogs() {
               : logs.map(log => (
                 <tr key={log.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
                   <td style={{ padding:'12px 16px' }}><div style={{ fontWeight:600 }}>{log.name}</div><div style={{ fontSize:11, color:'var(--gray-400)' }}>{log.email}</div></td>
-                  <td style={{ padding:'12px 16px' }}><span className={'badge dept-' + log.department?.replace(' ','')}>{log.department}</span></td>
+                  <td style={{ padding:'12px 16px' }}><span className={'badge dept-' + (log.department||'').replace(' ','')}>{log.department}</span></td>
                   <td style={{ padding:'12px 16px', fontFamily:'DM Mono', fontSize:13 }}>{log.date}</td>
                   <td style={{ padding:'12px 16px', fontFamily:'DM Mono', fontSize:13, color:'var(--green)' }}>{formatTime(log.clock_in)}</td>
                   <td style={{ padding:'12px 16px', fontFamily:'DM Mono', fontSize:13, color:log.clock_out?'var(--red)':'var(--gray-400)' }}>{formatTime(log.clock_out)}</td>
                   <td style={{ padding:'12px 16px', fontWeight:600 }}>{calcDuration(log.clock_in, log.clock_out)}</td>
                   <td style={{ padding:'12px 16px' }}>
-                    {!log.clock_out ? <span className="badge badge-available"><span className="status-dot available" />Active</span>
-                    : <span className="badge badge-offline"><span className="status-dot offline" />Completed</span>}
+                    {!log.clock_out
+                      ? <span className="badge badge-available"><span className="status-dot available" />Active</span>
+                      : <span className="badge badge-offline"><span className="status-dot offline" />Completed</span>}
                   </td>
                 </tr>
               ))}
@@ -154,7 +161,7 @@ export default function ClockLogs() {
               : breakLogs.map(log => (
                 <tr key={log.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
                   <td style={{ padding:'12px 16px' }}><div style={{ fontWeight:600 }}>{log.name}</div><div style={{ fontSize:11, color:'var(--gray-400)' }}>{log.email}</div></td>
-                  <td style={{ padding:'12px 16px' }}><span className={'badge dept-' + log.department?.replace(' ','')}>{log.department}</span></td>
+                  <td style={{ padding:'12px 16px' }}><span className={'badge dept-' + (log.department||'').replace(' ','')}>{log.department}</span></td>
                   <td style={{ padding:'12px 16px', fontFamily:'DM Mono', fontSize:13 }}>{log.date}</td>
                   <td style={{ padding:'12px 16px' }}>
                     <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:600, background: log.break_type_color ? log.break_type_color+'22' : '#f3f4f6', color: log.break_type_color || '#374151' }}>
@@ -163,10 +170,11 @@ export default function ClockLogs() {
                   </td>
                   <td style={{ padding:'12px 16px', fontFamily:'DM Mono', fontSize:13, color:'var(--green)' }}>{formatTime(log.started_at)}</td>
                   <td style={{ padding:'12px 16px', fontFamily:'DM Mono', fontSize:13, color:log.ended_at?'var(--red)':'var(--gray-400)' }}>{formatTime(log.ended_at)}</td>
-                  <td style={{ padding:'12px 16px', fontWeight:600 }}>{log.duration_minutes != null ? log.duration_minutes+'m' : '\u2014'}</td>
+                  <td style={{ padding:'12px 16px', fontWeight:600 }}>{log.duration_minutes != null ? log.duration_minutes+'m' : '—'}</td>
                   <td style={{ padding:'12px 16px' }}>
-                    {!log.ended_at ? <span className="badge badge-available"><span className="status-dot available" />Active</span>
-                    : <span className="badge badge-offline"><span className="status-dot offline" />Completed</span>}
+                    {!log.ended_at
+                      ? <span className="badge badge-available"><span className="status-dot available" />Active</span>
+                      : <span className="badge badge-offline"><span className="status-dot offline" />Completed</span>}
                   </td>
                 </tr>
               ))}
@@ -186,7 +194,7 @@ function StatCard({ label, value, icon }) {
           <div style={{ fontSize:12, color:'var(--gray-500)', fontWeight:600, textTransform:'uppercase', letterSpacing:0.5 }}>{label}</div>
           <div style={{ fontSize:30, fontWeight:700, marginTop:4 }}>{value}</div>
         </div>
-        <div style={{ fontSize:32 }}>{icon}</div>
+        <div style={{ fontSize:32 }} dangerouslySetInnerHTML={{ __html: icon }} />
       </div>
     </div>
   );

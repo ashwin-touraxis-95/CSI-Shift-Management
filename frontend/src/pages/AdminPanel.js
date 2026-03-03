@@ -184,6 +184,7 @@ export default function AdminPanel() {
     { id:'display',     label:'📺 Display Screen',     adminOnly: true },
     { id:'structure',   label:'🏢 Org Structure',      adminOnly: false },
     { id:'breaks',      label:'☕ Break Types',         adminOnly: false },
+    { id:'dashboard',   label:'📊 Dashboard',           adminOnly: true },
     { id:'bigquery',    label:'📊 Sheets Sync',         adminOnly: true },
     { id:'permissions', label:'🔐 Permissions',         adminOnly: true },
     { id:'audit',       label:'📋 Audit Log',           adminOnly: true },
@@ -753,6 +754,45 @@ export default function AdminPanel() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'dashboard' && (
+        <div className="fade-in">
+          <p style={{ color:'var(--gray-500)', fontSize:14, marginBottom:24 }}>
+            Control which user types appear in the Live Availability dashboard.
+          </p>
+          <div className="card" style={{ padding:28, maxWidth:520 }}>
+            <h3 style={{ fontWeight:700, marginBottom:4 }}>Visible on Dashboard</h3>
+            <p style={{ fontSize:13, color:'var(--gray-400)', marginBottom:20 }}>Only selected user types will appear in the ONLINE / AWAY / OFFLINE columns. Agents are always shown by default.</p>
+            {[
+              { key:'dash_show_agents', label:'Agents', desc:'Front-line staff who clock in and out', default:true },
+              { key:'dash_show_leaders', label:'Team Leaders', desc:'Supervisors managing teams', default:false },
+              { key:'dash_show_managers', label:'Managers', desc:'Department managers', default:false },
+            ].map(item => {
+              const enabled = item.default
+                ? theme[item.key] !== false && theme[item.key] !== 'false'
+                : theme[item.key] === true || theme[item.key] === 'true';
+              return (
+                <div key={item.key} onClick={async () => {
+                  const newVal = !enabled;
+                  await axios.put('/api/theme', { [item.key]: newVal });
+                  setTheme(t => ({ ...t, [item.key]: newVal }));
+                }} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 14px', borderRadius:10, cursor:'pointer',
+                  background: enabled ? '#fef2f2' : 'var(--gray-50)', border: '1.5px solid ' + (enabled ? 'var(--red)' : 'var(--gray-200)'), marginBottom:10 }}>
+                  <div style={{ width:22, height:22, borderRadius:6, border:'2px solid ' + (enabled ? 'var(--red)' : 'var(--gray-300)'),
+                    background: enabled ? 'var(--red)' : 'white', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    {enabled && <span style={{ color:'white', fontSize:13, fontWeight:700 }}>&#10003;</span>}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:14 }}>{item.label}</div>
+                    <div style={{ fontSize:12, color:'var(--gray-400)' }}>{item.desc}</div>
+                  </div>
+                  {item.default && <span style={{ marginLeft:'auto', fontSize:11, color:'var(--gray-400)', fontStyle:'italic' }}>default on</span>}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
