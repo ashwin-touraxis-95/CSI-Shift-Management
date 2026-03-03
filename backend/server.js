@@ -438,8 +438,14 @@ app.get('/api/shifts', requireAuth, async (req, res) => {
   const nxt = () => `$${p.length + 1}`;
 
   if (u.user_type==='agent') {
-    p.push(u.id);
-    q += ` AND s.user_id=$${p.length} AND s.status='published'`;
+    if (req.query.team === 'true') {
+      // Team view — show all published shifts in agent's department
+      p.push(u.department);
+      q += ` AND u.department=$${p.length} AND s.status='published'`;
+    } else {
+      p.push(u.id);
+      q += ` AND s.user_id=$${p.length} AND s.status='published'`;
+    }
   }
   // Team leaders and managers see ALL published shifts
   if (user_id && u.user_type!=='agent') { p.push(user_id); q += ` AND s.user_id=$${p.length}`; }
@@ -596,6 +602,21 @@ app.get('/api/logs', requireAuth, requirePerm('view_clock_logs'), async (req, re
   res.json(await all(q+` ORDER BY cl.date DESC,cl.clock_in DESC`,p));
 });
 app.get('/api/audit-log', requireAdmin, async (req, res) => res.json(await all('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 200')));
+
+app.get('/api/break-logs', requireAuth, requirePerm('view_clock_logs'), async (req, res) => {
+  const { date, user_id } = req.query;
+  let q = `SELECT bl.*,u.name,u.email,u.department FROM break_logs bl JOIN users u ON bl.user_id=u.id WHERE 1=1`;
+  const p = [];
+  if (req.user.user_type==='team_leader'&&req.perms?.view_own_logs_only) {
+    const agentRows = await all('SELECT agent_id FROM team_leader_agents WHERE leader_id=$1',[req.user.id]);
+    const agentIds = agentRows.map(r=>r.agent_id);
+    if (agentIds.length) { q+=` AND bl.user_id IN (${agentIds.map((_,i)=>`$${p.length+i+1}`).join(',')}) `; p.push(...agentIds); }
+    else q+=` AND 1=0`;
+  }
+  if (date) { p.push(date); q+=` AND bl.date=$${p.length}`; }
+  if (user_id) { p.push(user_id); q+=` AND bl.user_id=$${p.length}`; }
+  res.json(await all(q+` ORDER BY bl.date DESC,bl.started_at DESC`,p));
+});
 
 // ── PERMISSIONS ───────────────────────────────────────────────────────────────
 app.get('/api/permissions', requireAdmin, async (req, res) => {

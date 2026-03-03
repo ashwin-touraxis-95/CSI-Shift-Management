@@ -291,14 +291,19 @@ export default function ManageShifts() {
                     {dates.map(date=>{
                       const dayShifts = uShifts.filter(s=>s.date===date);
                       return <td key={date} style={{ padding:'4px 2px', textAlign:'center', verticalAlign:'middle' }}>
-                        {dayShifts.map(s=>(
-                          <div key={s.id} title={`${s.start_time}-${s.end_time} ${s.department}`}
-                            style={{ fontSize:9, padding:'2px 4px', borderRadius:3, background:s.status==='draft'?'#fcd34d':'var(--green)', color:s.status==='draft'?'#92400e':'white', marginBottom:2, cursor:'pointer', fontWeight:600, lineHeight:1.3 }}
-                            onClick={()=>{if(s.status==='draft'&&window.confirm('Publish this shift?'))axios.post('/api/shifts/publish',{shift_ids:[s.id]}).then(fetchAll);}}>
-                            {s.start_time.slice(0,5)}–{s.end_time.slice(0,5)}
-                            {s.status==='draft'&&<span> 📝</span>}
-                          </div>
-                        ))}
+                        {dayShifts.map(s=>{
+                          const dc = depts.find(d=>d.name===s.department);
+                          const bgColor = s.status==='draft' ? '#fcd34d' : (dc ? dc.bg_color : '#22c55e');
+                          const txtColor = s.status==='draft' ? '#92400e' : (dc ? dc.color : 'white');
+                          return (
+                            <div key={s.id} title={`${s.start_time}-${s.end_time} ${s.department}`}
+                              style={{ fontSize:9, padding:'2px 4px', borderRadius:3, background:bgColor, color:txtColor, marginBottom:2, cursor:'pointer', fontWeight:600, lineHeight:1.3 }}
+                              onClick={()=>{if(s.status==='draft'&&window.confirm('Publish this shift?'))axios.post('/api/shifts/publish',{shift_ids:[s.id]}).then(fetchAll);}}>
+                              {s.start_time.slice(0,5)}–{s.end_time.slice(0,5)}
+                              {s.status==='draft'&&<span> 📝</span>}
+                            </div>
+                          );
+                        })}
                       </td>;
                     })}
                   </tr>;

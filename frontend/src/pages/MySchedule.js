@@ -31,14 +31,15 @@ export default function MySchedule() {
 
   const fetchData = async () => {
     const { start, end } = getRange();
-    const [sr, ur, depr, setr] = await Promise.all([
+    const [sr, teamSr, ur, depr, setr] = await Promise.all([
       axios.get(`/api/shifts?start=${start}&end=${end}`),
+      axios.get(`/api/shifts?start=${start}&end=${end}&team=true`),
       axios.get('/api/users'),
       axios.get('/api/departments'),
       axios.get('/api/theme'),
     ]);
-    setAllShifts(sr.data);
-    setShifts(sr.data.filter(s => s.user_id === user?.id && s.status !== 'draft'));
+    setShifts(sr.data.filter(s => s.status !== 'draft'));
+    setAllShifts(teamSr.data.filter(s => s.status !== 'draft'));
     setUsers(ur.data.filter(u => u.active !== 0));
     setDepts(depr.data);
     setSettings(setr.data);
@@ -76,7 +77,7 @@ export default function MySchedule() {
   const WeekView = () => {
     const weekStart = startOfWeek(current,{weekStartsOn:1});
     const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
-    const deptAgents = users.filter(u => u.department === user?.department && u.user_type === 'agent');
+    const deptAgents = users.filter(u => u.department === user?.department);
     const displayShifts = showTeam ? allShifts.filter(s=>s.status!=='draft') : shifts;
     const dc = depts.find(d=>d.name===user?.department);
 

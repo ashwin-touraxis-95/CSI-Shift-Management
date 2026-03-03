@@ -13,17 +13,20 @@ export default function Layout({ children }) {
     if (isLeader || isManager || isAdmin) menu.push({ to:'/schedule', icon:'📊', label:'Team Schedule' });
     if (isAgent) menu.push({ to:'/my-schedule', icon:'📅', label:'My Schedule' });
 
-    // Management section: Team + Manage Shifts
+    // Management section: Team Management + Manage Shifts
     const management = [];
     if (can('manage_shifts')) management.push({ to:'/manage-shifts', icon:'✏️', label:'Manage Shifts' });
-    if (can('view_clock_logs')) management.push({ to:'/logs', icon:'📋', label:'Clock Logs' });
-    if (isManager || isLeader || isAdmin) management.push({ to:'/team', icon:'👤', label:'Team' });
+    if (isManager || isLeader || isAdmin) management.push({ to:'/team', icon:'👤', label:'Team Management' });
+
+    // Logs section
+    const logs = [];
+    if (can('view_clock_logs')) logs.push({ to:'/logs', icon:'📋', label:'Logs' });
 
     // Admin section
     const admin = [];
     if (isAdmin || isManager || isLeader) admin.push({ to:'/admin', icon:'🛡️', label:'Admin Panel' });
 
-    return { menu, management, admin };
+    return { menu, management, logs, admin };
   };
 
   const USER_TYPE_LABELS = { account_admin:'Account Admin', manager:'Manager', team_leader:'Team Leader', agent:'Agent' };
@@ -72,7 +75,7 @@ export default function Layout({ children }) {
 
         <nav style={{ padding:'12px 10px', flex:1, overflowY:'auto' }}>
           {(() => {
-            const { menu, management, admin } = buildNav();
+            const { menu, management, logs, admin } = buildNav();
             const SectionLabel = ({ label }) => (
               <div style={{ fontSize:10,fontWeight:700,color:sidebarSectionLabel,letterSpacing:1.5,padding:'14px 8px 8px',textTransform:'uppercase' }}>{label}</div>
             );
@@ -82,6 +85,10 @@ export default function Layout({ children }) {
               {management.length > 0 && <>
                 <SectionLabel label="Management" />
                 {management.map(item => <NavItem key={item.to} {...item}/>)}
+              </>}
+              {logs.length > 0 && <>
+                <SectionLabel label="Logs" />
+                {logs.map(item => <NavItem key={item.to} {...item}/>)}
               </>}
               {admin.length > 0 && <>
                 <SectionLabel label="Admin" />

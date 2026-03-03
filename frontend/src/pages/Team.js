@@ -34,13 +34,12 @@ export default function Team() {
   const fetchUsers = async () => {
     try {
       const r = await axios.get('/api/users');
-      setUsers(Array.isArray(r.data) ? r.data : []);
+      const userList = Array.isArray(r.data) ? r.data : [];
+      setUsers(userList);
+      // Pre-load roles for all agents
+      userList.filter(u => u.user_type === 'agent').forEach(u => fetchAgentRoles(u.id));
     } catch(e) {
-      if (e.response?.status === 401) {
-        msg('Session expired — please log out and back in.');
-      } else {
-        msg('Failed to load users: ' + (e.response?.data?.error || e.message));
-      }
+      msg('Failed to load users: ' + (e.response?.data?.error || e.message));
     }
   };
   const fetchDepts = async () => {
@@ -227,16 +226,17 @@ export default function Team() {
       <div className="card" style={{ overflow:'auto' }}>
         <table style={{ width:'100%',borderCollapse:'collapse',fontSize:14 }}>
           <thead><tr style={{ background:'var(--gray-50)',borderBottom:'2px solid var(--gray-200)' }}>
-            {['User','Email','Department','User Type','Status','Actions'].map(h=><th key={h} style={{ padding:'12px 16px',textAlign:'left',fontWeight:600,fontSize:12,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:0.5 }}>{h}</th>)}
+            {['User','Email','Department','User Type','Job Roles','Status','Actions'].map(h=><th key={h} style={{ padding:'12px 16px',textAlign:'left',fontWeight:600,fontSize:12,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:0.5 }}>{h}</th>)}
           </tr></thead>
           <tbody>
             {displayed.length===0 && <tr><td colSpan={6} style={{ padding:40,textAlign:'center',color:'var(--gray-400)' }}>No users found</td></tr>}
             {displayed.map(user => {
               const isEditing = editing?.id===user.id;
               const cur = isEditing ? editing : user;
+              const currentRoles = agentRoles[user.id] || [];
+              const deptRoles = jobRoles.filter(jr => jr.department_name === cur.department);
               return (
-                <React.Fragment key={user.id}>
-                <tr style={{ borderBottom:'1px solid var(--gray-100)',background:isEditing?'#fffbeb':'white',opacity:user.active===0?0.65:1 }}>
+                <tr key={user.id} style={{ borderBottom:'1px solid var(--gray-100)',background:isEditing?'#fffbeb':'white',opacity:user.active===0?0.65:1 }}>
                   <td style={{ padding:'12px 16px' }}>
                     <div style={{ display:'flex',alignItems:'center',gap:10 }}>
                       {user.avatar ? <img src={user.avatar} alt="" style={{ width:34,height:34,borderRadius:'50%' }}/>
@@ -255,6 +255,31 @@ export default function Team() {
                     {isEditing ? <select value={cur.user_type} onChange={e=>setEditing(p=>({...p,user_type:e.target.value}))} style={{ maxWidth:140 }}>
                       {assignableRoles().map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
                     </select> : <span style={{ fontWeight:600,fontSize:13,color:roleColor[user.user_type]||'var(--gray-600)',textTransform:'capitalize' }}>{user.user_type?.replace('_',' ')}</span>}
+                  </td>
+                  <td style={{ padding:'8px 16px', maxWidth:220 }}>
+                    {cur.user_type === 'agent' ? (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                        {isEditing ? (
+                          deptRoles.length === 0
+                            ? <span style={{ fontSize:11,color:'var(--gray-400)' }}>No roles in {cur.department}</span>
+                            : deptRoles.map(jr => {
+                                const assigned = currentRoles.includes(jr.id);
+                                return (
+                                  <button key={jr.id} onClick={() => handleToggleAgentRole(user.id, jr.id, currentRoles)}
+                                    style={{ padding:'3px 10px', borderRadius:20, fontSize:11, fontWeight:600, cursor:'pointer', border:`1.5px solid ${assigned?'var(--red)':'var(--gray-300)'}`, background:assigned?'#fef2f2':'white', color:assigned?'var(--red)':'var(--gray-500)' }}>
+                                    {assigned ? '✓ ' : '+ '}{jr.name}
+                                  </button>
+                                );
+                              })
+                        ) : (
+                          currentRoles.length === 0
+                            ? <span style={{ fontSize:11,color:'var(--gray-400)' }}>—</span>
+                            : jobRoles.filter(jr => currentRoles.includes(jr.id)).map(jr => (
+                                <span key={jr.id} style={{ padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:600,background:'#fef2f2',color:'var(--red)',border:'1px solid #fecaca' }}>{jr.name}</span>
+                              ))
+                        )}
+                      </div>
+                    ) : <span style={{ fontSize:11,color:'var(--gray-300)' }}>—</span>}
                   </td>
                   <td style={{ padding:'12px 16px' }}>
                     <span style={{ display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:600,color:user.active!==0?'#16a34a':'#94a3b8' }}>
@@ -280,30 +305,6 @@ export default function Team() {
                     )}
                   </td>
                 </tr>
-                {isEditing && cur.user_type === 'agent' && (
-                  <tr key={`roles-${user.id}`}>
-                    <td colSpan={6} style={{ padding:'0 16px 16px', background:'#fffbeb', borderBottom:'1px solid var(--gray-100)' }}>
-                      <div style={{ padding:'14px 16px', background:'white', borderRadius:10, border:'1px solid var(--gray-200)' }}>
-                        <div style={{ fontWeight:700, fontSize:13, marginBottom:10, color:'var(--gray-700)' }}>🎯 Job Roles</div>
-                        {jobRoles.filter(jr => jr.department_name === cur.department).length === 0
-                          ? <p style={{ fontSize:13, color:'var(--gray-400)', margin:0 }}>No job roles found for {cur.department}. Add roles in Org Structure.</p>
-                          : <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                              {jobRoles.filter(jr => jr.department_name === cur.department).map(jr => {
-                                const assigned = (agentRoles[user.id] || []).includes(jr.id);
-                                return (
-                                  <button key={jr.id} onClick={() => handleToggleAgentRole(user.id, jr.id, agentRoles[user.id] || [])}
-                                    style={{ padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:600, cursor:'pointer', border:`1.5px solid ${assigned ? 'var(--red)' : 'var(--gray-300)'}`, background: assigned ? '#fef2f2' : 'white', color: assigned ? 'var(--red)' : 'var(--gray-600)', transition:'all 0.15s' }}>
-                                    {assigned ? '✓ ' : '+ '}{jr.name}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                        }
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                </React.Fragment>
               );
             })}
           </tbody>

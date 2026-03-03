@@ -457,9 +457,24 @@ export default function AdminPanel() {
           {/* Department cards */}
           {departments.map(dept => (
             <div key={dept.id} className="card" style={{ padding:24, marginBottom:20, borderLeft:`4px solid ${dept.color}` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
                 <div style={{ width:12,height:12,borderRadius:'50%',background:dept.color }}/>
                 <h3 style={{ margin:0, fontWeight:800, fontSize:17 }}>{dept.name}</h3>
+
+                {/* Colour pickers */}
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <label style={{ fontSize:11, color:'var(--gray-400)', fontWeight:600, margin:0 }}>TEXT</label>
+                  <input type="color" value={dept.color||'#333333'}
+                    onChange={e => setDepartments(ds => ds.map(d => d.id===dept.id ? {...d,color:e.target.value} : d))}
+                    onBlur={e => axios.put('/api/departments/'+dept.id, { name:dept.name, color:e.target.value, bg_color:dept.bg_color })}
+                    style={{ width:32, height:28, padding:2, borderRadius:6, border:'1px solid var(--gray-200)', cursor:'pointer' }}/>
+                  <label style={{ fontSize:11, color:'var(--gray-400)', fontWeight:600, margin:0 }}>BG</label>
+                  <input type="color" value={dept.bg_color||'#f0f0f0'}
+                    onChange={e => setDepartments(ds => ds.map(d => d.id===dept.id ? {...d,bg_color:e.target.value} : d))}
+                    onBlur={e => axios.put('/api/departments/'+dept.id, { name:dept.name, color:dept.color, bg_color:e.target.value })}
+                    style={{ width:32, height:28, padding:2, borderRadius:6, border:'1px solid var(--gray-200)', cursor:'pointer' }}/>
+                  <div style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background:dept.bg_color||'#f0f0f0', color:dept.color||'#333' }}>Preview</div>
+                </div>
 
                 {/* Managers for this dept */}
                 <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
