@@ -98,13 +98,21 @@ export default function Dashboard() {
     catch (e) { showMsg(e.response?.data?.error || 'Error', 'error'); }
   };
 
-  const filtered = deptFilter === 'all' ? availability : availability.filter(u => u.department === deptFilter);
+  // Agents only see departments that have actual agents in them (hides Management, Trainees etc)
+  const agentOnlyDepts = isAgent
+    ? departments.filter(d => availability.some(u => u.department === d.name && u.user_type === 'agent'))
+    : departments;
+
+  // For agents: filter to agents only. Also respect dept filter.
+  const filtered = deptFilter === 'all'
+    ? (isAgent ? availability.filter(u => u.user_type === 'agent') : availability)
+    : availability.filter(u => u.department === deptFilter && (isAgent ? u.user_type === 'agent' : true));
   const online = filtered.filter(u => u.status === 'available');
   const onBreak = filtered.filter(u => u.status === 'on_break');
-  const offline = filtered.filter(u => !u.status || u.status === 'offline');
+  const offline = filtered.filter(u => !u.status || (u.status !== 'available' && u.status !== 'on_break'));
 
   const AVATAR_COLORS = ['#C0392B','#2980B9','#8E44AD','#16A085','#E67E22','#27AE60','#E74C3C','#1ABC9C'];
-  const avatarColor = (name) => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
+  const avatarColor = (name) => AVATAR_COLORS[((name?.trim() || '').charCodeAt(0) || 0) % AVATAR_COLORS.length];
 
   const OverridePopup = ({ agent }) => {
     const isOffline = !agent.status || agent.status === 'offline';
@@ -168,7 +176,7 @@ export default function Dashboard() {
     return (
       <div style={{ padding:'10px 12px', borderRadius:10, marginBottom:8, border:'1px solid #E2E8F0', borderLeft:`3px solid ${borderColor}`, background:'white', display:'flex', alignItems:'center', gap:10, opacity:(!isOnline&&!isBreaking)?0.6:1 }}>
         <div style={{ width:34, height:34, borderRadius:'50%', background:avatarColor(agent.name), color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:13, flexShrink:0, overflow:'hidden' }}>
-          {agent.avatar ? <img src={agent.avatar} alt="" style={{ width:34, height:34, borderRadius:'50%' }}/> : agent.name?.[0]}
+          {agent.avatar ? <img src={agent.avatar} alt="" style={{ width:34, height:34, borderRadius:'50%' }}/> : agent.name?.trim()?.[0]?.toUpperCase()}
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontWeight:600, fontSize:13, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{agent.name}</div>
@@ -235,7 +243,7 @@ export default function Dashboard() {
             <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)}
               style={{ padding:'5px 12px', borderRadius:8, border:'1px solid #E2E8F0', fontSize:12, fontFamily:'inherit', background:'white', color:'#374151' }}>
               <option value="all">All Departments</option>
-              {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              {agentOnlyDepts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
           </div>
 

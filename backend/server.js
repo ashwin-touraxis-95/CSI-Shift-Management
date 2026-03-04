@@ -324,11 +324,20 @@ app.get('/api/availability', requireAuth, async (req, res) => {
     FROM users u LEFT JOIN availability a ON u.id=a.user_id
     WHERE u.user_type IN (${placeholders}) AND u.active=1 ORDER BY u.department,u.name`, allowedTypes);
   const result = await Promise.all(users.map(async u => {
-    if (u.status === 'on_break') {
-      const bl = await get('SELECT started_at FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL', [u.id, today]);
-      return { ...u, break_started_at: bl ? bl.started_at : null };
+    let status = u.status;
+    // Self-heal: if availability says offline but agent has open clock session today, correct it
+    if ((!status || status === 'offline') && u.user_type === 'agent') {
+      const openClock = await get('SELECT id FROM clock_logs WHERE user_id=$1 AND date=$2 AND clock_out IS NULL', [u.id, today]);
+      if (openClock) {
+        await run("UPDATE availability SET status='available',last_updated=NOW() WHERE user_id=$1", [u.id]);
+        status = 'available';
+      }
     }
-    return u;
+    if (status === 'on_break') {
+      const bl = await get('SELECT started_at FROM break_logs WHERE user_id=$1 AND date=$2 AND ended_at IS NULL', [u.id, today]);
+      return { ...u, status, break_started_at: bl ? bl.started_at : null };
+    }
+    return { ...u, status };
   }));
   res.json(result);
 });
@@ -570,6 +579,36 @@ app.put('/api/users/:id', requireAuth, canManageUsers, async (req, res) => {
   }
   res.json({ ok: true });
 });
+
+// Avatar upload — any user can update their own; admins/managers can update anyone
+app.post('/api/users/:id/avatar', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const requester = req.user;
+  // Must be own avatar OR admin/manager
+  if (requester.id !== id && !['account_admin','manager'].includes(requester.user_type))
+    return res.status(403).json({ error: 'Not allowed' });
+  const { avatar } = req.body; // base64 data URL
+  if (!avatar) return res.status(400).json({ error: 'No avatar provided' });
+  // Limit size ~500KB
+  if (avatar.length > 700000) return res.status(400).json({ error: 'Image too large. Please use an image under 500KB.' });
+  await run('UPDATE users SET avatar=$1 WHERE id=$2', [avatar, id]);
+  // Update session if own avatar
+  if (requester.id === id) {
+    const updated = await getUser(id);
+    res.json({ ok: true, avatar, user: safeUser(updated) });
+  } else {
+    res.json({ ok: true, avatar });
+  }
+});
+
+// Remove avatar
+app.delete('/api/users/:id/avatar', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  if (req.user.id !== id && !['account_admin','manager'].includes(req.user.user_type))
+    return res.status(403).json({ error: 'Not allowed' });
+  await run('UPDATE users SET avatar=NULL WHERE id=$1', [id]);
+  res.json({ ok: true });
+});
 app.post('/api/users/:id/set-active', requireAuth, async (req, res) => {
   const u = req.user;
   if (!['account_admin','manager','team_leader'].includes(u.user_type)) return res.status(403).json({ error:'Permission denied' });
@@ -693,12 +732,16 @@ initDb().then(async () => {
   // Auto-close any open clock sessions at midnight SAST
   cron.schedule('0 22 * * *', async () => { // midnight SAST (UTC+2)
     const yesterday = new Date(new Date().getTime() + 2*60*60*1000 - 86400000).toISOString().split('T')[0];
-    const openSessions = await all("SELECT id FROM clock_logs WHERE date=$1 AND clock_out IS NULL", [yesterday]);
+    const openSessions = await all("SELECT id, user_id FROM clock_logs WHERE date=$1 AND clock_out IS NULL", [yesterday]);
     for (const s of openSessions) {
       await run("UPDATE clock_logs SET clock_out=NOW() WHERE id=$1", [s.id]);
+      // Only set offline if the user hasn't already clocked in today
+      const todaySession = await get("SELECT id FROM clock_logs WHERE user_id=$1 AND date=NOW()::date AND clock_out IS NULL", [s.user_id]);
+      if (!todaySession) {
+        await run("UPDATE availability SET status='offline',break_type_id=NULL,break_type_name=NULL,break_type_icon=NULL,break_type_color=NULL,last_updated=NOW() WHERE user_id=$1", [s.user_id]);
+      }
     }
     if (openSessions.length) console.log(`🕛 Auto-closed ${openSessions.length} open clock sessions from ${yesterday}`);
-    await run("UPDATE availability SET status='offline',break_type_id=NULL,break_type_name=NULL,break_type_icon=NULL,break_type_color=NULL,last_updated=NOW() WHERE status!='offline'");
     io.emit('availability_update');
   }, { timezone: 'UTC' });
 

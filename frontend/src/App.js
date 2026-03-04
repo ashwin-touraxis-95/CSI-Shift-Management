@@ -33,6 +33,7 @@ import Schedule from './pages/Schedule';
 import ClockLogs from './pages/ClockLogs';
 import ManageShifts from './pages/ManageShifts';
 import Team from './pages/Team';
+import Profile from './pages/Profile';
 import AdminPanel from './pages/AdminPanel';
 import Display from './pages/Display';
 
@@ -61,6 +62,7 @@ function AppRoutes() {
       <Route path="/logs" element={<PrivateRoute requirePerm="view_clock_logs"><ClockLogs /></PrivateRoute>} />
       <Route path="/manage-shifts" element={<PrivateRoute requirePerm="manage_shifts"><ManageShifts /></PrivateRoute>} />
       <Route path="/team" element={<PrivateRoute><Team /></PrivateRoute>} />
+      <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
       <Route path="/display" element={<Display />} />
       <Route path="/admin" element={<PrivateRoute requireUserType={['account_admin','manager','team_leader']}><AdminPanel /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" />} />

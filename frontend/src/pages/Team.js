@@ -254,8 +254,18 @@ export default function Team() {
                 <tr key={user.id} style={{ borderBottom:'1px solid var(--gray-100)',background:isEditing?'#fffbeb':'white',opacity:user.active===0?0.65:1 }}>
                   <td style={{ padding:'12px 16px' }}>
                     <div style={{ display:'flex',alignItems:'center',gap:10 }}>
-                      {user.avatar ? <img src={user.avatar} alt="" style={{ width:34,height:34,borderRadius:'50%' }}/>
-                        : <div style={{ width:34,height:34,borderRadius:'50%',background:roleColor[user.user_type]||'var(--gray-300)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700 }}>{user.name?.[0]}</div>}
+                    <div style={{ position:'relative', flexShrink:0 }}>
+                      {user.avatar ? <img src={user.avatar} alt="" style={{ width:34,height:34,borderRadius:'50%',objectFit:'cover' }}/>
+                        : <div style={{ width:34,height:34,borderRadius:'50%',background:roleColor[user.user_type]||'var(--gray-300)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700 }}>{user.name?.trim()?.[0]?.toUpperCase()}</div>}
+                      <label htmlFor={'avatar-'+user.id} title="Upload photo" style={{ position:'absolute',bottom:-2,right:-2,width:16,height:16,borderRadius:'50%',background:'white',border:'1px solid var(--gray-200)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,cursor:'pointer' }}>📷</label>
+                      <input id={'avatar-'+user.id} type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
+                        const file = e.target.files[0]; if (!file) return;
+                        if (file.size > 500000) return msg('Please choose an image under 500KB', 'error');
+                        const reader = new FileReader();
+                        reader.onload = async ev => { try { await axios.post('/api/users/'+user.id+'/avatar', { avatar: ev.target.result }); fetchUsers(); } catch(err) { msg(err.response?.data?.error||'Upload failed','error'); } };
+                        reader.readAsDataURL(file); e.target.value='';
+                      }}/>
+                    </div>
                       {isEditing ? <input value={editing.name} onChange={e=>setEditing(p=>({...p,name:e.target.value}))} style={{ maxWidth:160 }}/>
                         : <span style={{ fontWeight:600 }}>{user.name}</span>}
                     </div>

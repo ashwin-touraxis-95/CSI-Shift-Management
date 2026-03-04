@@ -100,8 +100,25 @@ export default function Layout({ children }) {
 
         <div style={{ padding:14, borderTop:`1px solid ${sidebarDivider}` }}>
           <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:10 }}>
-            {user?.avatar ? <img src={user.avatar} alt="" style={{ width:34,height:34,borderRadius:'50%' }}/>
-              : <div style={{ width:34,height:34,borderRadius:'50%',background:primary,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,color:'white' }}>{user?.name?.[0]}</div>}
+            <div style={{ position:'relative', flexShrink:0, cursor:'pointer' }} onClick={()=>document.getElementById('sidebar-avatar-input').click()} title="Click to change photo">
+              {user?.avatar ? <img src={user.avatar} alt="" style={{ width:34,height:34,borderRadius:'50%',objectFit:'cover' }}/>
+                : <div style={{ width:34,height:34,borderRadius:'50%',background:primary,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,color:'white' }}>{user?.name?.trim()?.[0]?.toUpperCase()}</div>}
+              <div style={{ position:'absolute',bottom:-2,right:-2,width:14,height:14,borderRadius:'50%',background:'#fff',border:`1px solid ${sidebarDivider}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8 }}>📷</div>
+              <input id="sidebar-avatar-input" type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (file.size > 500000) return alert('Please choose an image under 500KB');
+                const reader = new FileReader();
+                reader.onload = async ev => {
+                  try {
+                    const r = await import('axios').then(m=>m.default.post(`/api/users/${user.id}/avatar`, { avatar: ev.target.result }));
+                    if (r.data.ok) window.location.reload();
+                  } catch(err) { alert(err.response?.data?.error || 'Upload failed'); }
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
+              }}/>
+            </div>
             <div style={{ flex:1,minWidth:0 }}>
               <div style={{ fontWeight:600,fontSize:13,color:sidebarUserName,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{user?.name}</div>
               <div style={{ fontSize:10,marginTop:2 }}>
@@ -111,7 +128,7 @@ export default function Layout({ children }) {
               </div>
             </div>
           </div>
-          <button onClick={()=>navigate('/change-password')} style={{ width:'100%',padding:'7px',borderRadius:8,border:`1px solid ${sidebarBtnBorder}`,background:'transparent',color:sidebarBtnText,fontSize:12,cursor:'pointer',fontFamily:'inherit',marginBottom:6 }}>🔐 Change Password</button>
+          <button onClick={()=>navigate('/profile')} style={{ width:'100%',padding:'7px',borderRadius:8,border:`1px solid ${sidebarBtnBorder}`,background:'transparent',color:sidebarBtnText,fontSize:12,cursor:'pointer',fontFamily:'inherit',marginBottom:6 }}>👤 My Profile</button>
           <button onClick={async()=>{ await logout(); navigate('/login'); }} style={{ width:'100%',padding:'7px',borderRadius:8,border:`1px solid ${sidebarBtnBorder}`,background:'transparent',color:sidebarBtnText,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Sign Out</button>
           <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${sidebarDivider}`, textAlign:'center' }}>
             {theme?.footer_line1 && <div style={{ fontSize:10, color:sidebarFooterText, lineHeight:1.8 }}>{theme.footer_line1}</div>}
