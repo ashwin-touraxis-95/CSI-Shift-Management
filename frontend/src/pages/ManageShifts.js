@@ -367,7 +367,7 @@ export default function ManageShifts() {
       {/* ── MONTHLY VIEW TAB ── */}
 
       {/* ── DRAFT MANAGEMENT TABLE ── */}
-      {drafts.length > 0 && (() => {
+      {tab === 'bulk' && drafts.length > 0 && (() => {
         // Consolidate drafts: group by agent + time + type + notes
         const groups = [];
         [...drafts].sort((a,b) => a.date.localeCompare(b.date)).forEach(s => {
