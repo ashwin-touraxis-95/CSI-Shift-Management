@@ -962,7 +962,6 @@ export default function AdminPanel() {
             </table>
           </div>
         </div>
-        </div>
       )}
 
       {/* ── AUDIT LOG ── */}
