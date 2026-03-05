@@ -13,10 +13,9 @@ export default function Layout({ children }) {
     if (isLeader || isManager || isAdmin) menu.push({ to:'/schedule', icon:'📊', label:'Team Schedule' });
     if (isAgent) menu.push({ to:'/my-schedule', icon:'📅', label:'My Schedule' });
 
-    // Management section: Team Management + Manage Shifts
+    // Management section: Manage Shifts + Leave + Hours
     const management = [];
     if (can('manage_shifts')) management.push({ to:'/manage-shifts', icon:'✏️', label:'Manage Shifts' });
-    if (isManager || isLeader || isAdmin) management.push({ to:'/team', icon:'👤', label:'Team Management' });
     if (isLeader || isManager || isAdmin) management.push({ to:'/leave', icon:'🏖️', label:'Leave Tracker' });
     if (isLeader || isManager || isAdmin) management.push({ to:'/hours', icon:'📊', label:'Hours Tracker' });
 
@@ -27,6 +26,7 @@ export default function Layout({ children }) {
     // Admin section
     const admin = [];
     if (isAdmin || isManager || isLeader) admin.push({ to:'/admin', icon:'🛡️', label:'Admin Panel' });
+    if (isManager || isLeader || isAdmin) admin.push({ to:'/team', icon:'👤', label:'User Management' });
 
     return { menu, management, logs, admin };
   };

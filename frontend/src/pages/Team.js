@@ -134,7 +134,7 @@ export default function Team() {
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:24 }}>
-        <div><h1 style={{ margin:0 }}>Team Management</h1><p style={{ color:'var(--gray-500)', marginTop:4 }}>Manage user accounts, roles and access</p></div>
+        <div><h1 style={{ margin:0 }}>User Management</h1><p style={{ color:'var(--gray-500)', marginTop:4 }}>Manage user accounts, roles and access</p></div>
         <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>+ Add User</button>
       </div>
 

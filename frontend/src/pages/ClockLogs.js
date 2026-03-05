@@ -75,11 +75,12 @@ export default function ClockLogs() {
           <h1>Logs</h1>
           <p>Management view — all activity records. Confidential.</p>
         </div>
-        <div style={{ display:'flex', borderRadius:8, overflow:'hidden', border:'1.5px solid var(--gray-200)' }}>
-          {[{id:'clock',label:'Clock Logs'},{id:'breaks',label:'Breaks'}].map(t => (
+        <div style={{ display:'flex', gap:4, borderBottom:'2px solid var(--gray-200)' }}>
+          {[{id:'clock',label:'🕐 Clock Logs'},{id:'breaks',label:'☕ Breaks'}].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding:'8px 20px', border:'none', cursor:'pointer', fontWeight:600, fontSize:13,
-              background: tab===t.id ? 'var(--red)' : 'white', color: tab===t.id ? 'white' : 'var(--gray-600)'
+              padding:'10px 20px', border:'none', background:'none', cursor:'pointer', fontFamily:'inherit', fontSize:14, fontWeight:600,
+              color: tab===t.id ? 'var(--red)' : 'var(--gray-500)',
+              borderBottom: tab===t.id ? '2px solid var(--red)' : '2px solid transparent', marginBottom:-2
             }}>{t.label}</button>
           ))}
         </div>

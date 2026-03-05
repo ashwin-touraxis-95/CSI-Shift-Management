@@ -783,6 +783,7 @@ export default function AdminPanel() {
                     <th style={{ padding:'10px 16px', textAlign:'left', fontSize:12, fontWeight:700, color:'var(--gray-500)' }}>Date</th>
                     <th style={{ padding:'10px 16px', textAlign:'left', fontSize:12, fontWeight:700, color:'var(--gray-500)' }}>Day</th>
                     <th style={{ padding:'10px 16px', textAlign:'left', fontSize:12, fontWeight:700, color:'var(--gray-500)' }}>Name</th>
+                    <th style={{ padding:'10px 16px', textAlign:'left', fontSize:12, fontWeight:700, color:'var(--gray-500)' }}>Region</th>
                     <th style={{ padding:'10px 16px', textAlign:'right', fontSize:12, fontWeight:700, color:'var(--gray-500)' }}></th>
                   </tr>
                 </thead>
@@ -790,6 +791,10 @@ export default function AdminPanel() {
                   {holidays.map((h,i) => {
                     const d = new Date(h.date+'T12:00:00');
                     const isWeekend = [0,6].includes(d.getDay());
+                    const SA_NAMES = ['Human Rights Day','Family Day','Freedom Day',"Workers' Day",'Youth Day',"National Women's Day",'Heritage Day','Day of Reconciliation','Day of Goodwill'];
+                    const PH_NAMES = ['Araw ng Kagitingan','Maundy Thursday','Labour Day','Independence Day','National Heroes Day',"All Saints' Day",'Bonifacio Day','Feast of the Immaculate Conception','Rizal Day'];
+                    const isSA = SA_NAMES.includes(h.name);
+                    const isPH = PH_NAMES.includes(h.name);
                     return (
                       <tr key={h.id} style={{ borderBottom:'1px solid var(--gray-100)', background:i%2===0?'white':'var(--gray-50)' }}>
                         <td style={{ padding:'10px 16px', fontFamily:'DM Mono', fontSize:13, fontWeight:600 }}>{h.date}</td>
@@ -798,6 +803,11 @@ export default function AdminPanel() {
                           {isWeekend && <span style={{ marginLeft:6, fontSize:11, background:'#fffbeb', color:'#d97706', padding:'1px 6px', borderRadius:4, fontWeight:600 }}>Weekend</span>}
                         </td>
                         <td style={{ padding:'10px 16px', fontSize:13, fontWeight:500 }}>{h.name}</td>
+                        <td style={{ padding:'10px 16px', fontSize:13 }}>
+                          {isSA && <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#f0fdf4', color:'#15803d', padding:'2px 8px', borderRadius:6, fontSize:12, fontWeight:600 }}>🇿🇦 South Africa</span>}
+                          {isPH && <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eff6ff', color:'#1d4ed8', padding:'2px 8px', borderRadius:6, fontSize:12, fontWeight:600 }}>🇵🇭 Philippines</span>}
+                          {!isSA && !isPH && <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>}
+                        </td>
                         <td style={{ padding:'10px 16px', textAlign:'right' }}>
                           <button onClick={()=>deleteHoliday(h.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:16 }}>🗑</button>
                         </td>
