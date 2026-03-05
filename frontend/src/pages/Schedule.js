@@ -188,9 +188,16 @@ export default function Schedule() {
               <th style={{ padding:'10px 14px', textAlign:'left', color:'rgba(255,255,255,0.7)', fontSize:12, fontWeight:600, width:160 }}>Agent</th>
               {days.map(d => {
                 const isWeekend = [0,6].includes(d.getDay());
+                const ds = format(d,'yyyy-MM-dd');
+                const holiday = publicHolidays.find(h => h.date === ds);
+                const SA_NAMES = ['Human Rights Day','Family Day','Freedom Day',"Workers' Day",'Youth Day',"National Women's Day",'Heritage Day','Day of Reconciliation','Day of Goodwill'];
+                const PH_NAMES = ['Araw ng Kagitingan','Maundy Thursday','Labour Day','Independence Day','National Heroes Day',"All Saints' Day",'Bonifacio Day','Feast of the Immaculate Conception','Rizal Day'];
+                const holidayFlag = holiday ? (SA_NAMES.includes(holiday.name) ? '🇿🇦' : PH_NAMES.includes(holiday.name) ? '🇵🇭' : '🌍') : null;
                 return (
-                  <th key={d} style={{ padding:'10px 8px', textAlign:'center', color: isToday(d)?'white':'rgba(255,255,255,0.7)', fontSize:12, fontWeight: isToday(d)?800:600, background: isToday(d)?'var(--red)':isWeekend?'rgba(255,255,255,0.05)':'transparent', minWidth:100 }}>
-                    <div>{format(d,'EEE')}</div><div style={{ opacity: isWeekend?0.6:1 }}>{format(d,'d MMM')}</div>
+                  <th key={d} style={{ padding:'10px 8px', textAlign:'center', color: isToday(d)?'white':holiday?'#fef08a':'rgba(255,255,255,0.7)', fontSize:12, fontWeight: isToday(d)?800:600, background: isToday(d)?'var(--red)':holiday?'rgba(234,179,8,0.25)':isWeekend?'rgba(255,255,255,0.05)':'transparent', minWidth:100 }}>
+                    <div>{format(d,'EEE')}</div>
+                    <div style={{ opacity: isWeekend?0.6:1 }}>{format(d,'d MMM')}</div>
+                    {holiday && <div style={{ fontSize:9, marginTop:2, color:'#fef08a', fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:90 }}>{holidayFlag} {holiday.name}</div>}
                   </th>
                 );
               })}
@@ -299,13 +306,18 @@ export default function Schedule() {
                   const ds = format(day,'yyyy-MM-dd');
                   const isWeekend = [0,6].includes(day.getDay());
                   const todayStr = ds === format(new Date(),'yyyy-MM-dd');
+                  const holiday = publicHolidays.find(h => h.date === ds);
+                  const SA_NAMES = ['Human Rights Day','Family Day','Freedom Day',"Workers' Day",'Youth Day',"National Women's Day",'Heritage Day','Day of Reconciliation','Day of Goodwill'];
+                  const PH_NAMES = ['Araw ng Kagitingan','Maundy Thursday','Labour Day','Independence Day','National Heroes Day',"All Saints' Day",'Bonifacio Day','Feast of the Immaculate Conception','Rizal Day'];
+                  const holidayFlag = holiday ? (SA_NAMES.includes(holiday.name) ? '🇿🇦' : PH_NAMES.includes(holiday.name) ? '🇵🇭' : '🌍') : null;
                   return (
-                    <th key={ds} style={{ padding:'6px 2px', textAlign:'center', fontWeight:600, fontSize:10,
-                      color: todayStr?'white':isWeekend?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.7)',
-                      minWidth:46, background: todayStr?'var(--red)':isWeekend?'rgba(255,255,255,0.04)':'transparent',
+                    <th key={ds} title={holiday ? holiday.name : undefined} style={{ padding:'4px 2px', textAlign:'center', fontWeight:600, fontSize:10,
+                      color: todayStr?'white':holiday?'#fef08a':isWeekend?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.7)',
+                      minWidth:46, background: todayStr?'var(--red)':holiday?'rgba(234,179,8,0.3)':isWeekend?'rgba(255,255,255,0.04)':'transparent',
                       borderLeft: isWeekend?'1px solid rgba(255,255,255,0.08)':undefined }}>
                       <div style={{ fontWeight:todayStr?800:600 }}>{format(day,'d')}</div>
                       <div style={{ fontWeight:400, opacity:0.8 }}>{format(day,'EEE')}</div>
+                      {holiday && <div style={{ fontSize:8, marginTop:1, color:'#fef08a', lineHeight:1.1 }}>{holidayFlag}</div>}
                     </th>
                   );
                 })}

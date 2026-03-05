@@ -18,6 +18,7 @@ export default function MySchedule() {
   const [settings, setSettings] = useState({});
   const [leaves, setLeaves]     = useState([]);
   const [showTeam, setShowTeam] = useState(false);
+  const [publicHolidays, setPublicHolidays] = useState([]);
 
   useEffect(() => { fetchData(); }, [view, current]);
 
@@ -32,13 +33,14 @@ export default function MySchedule() {
 
   const fetchData = async () => {
     const { start, end } = getRange();
-    const [sr, teamSr, ur, depr, setr, lr] = await Promise.all([
+    const [sr, teamSr, ur, depr, setr, lr, phr] = await Promise.all([
       axios.get(`/api/shifts?start=${start}&end=${end}`),
       axios.get(`/api/shifts?start=${start}&end=${end}&team=true`),
       axios.get('/api/users'),
       axios.get('/api/departments'),
       axios.get('/api/theme'),
       axios.get(`/api/leave?start=${start}&end=${end}`).catch(()=>({data:[]})),
+      axios.get(`/api/public-holidays?year=${new Date(start).getFullYear()}`).catch(()=>({data:[]})),
     ]);
     setShifts(sr.data.filter(s => s.status !== 'draft'));
     setAllShifts(teamSr.data.filter(s => s.status !== 'draft'));
@@ -46,6 +48,7 @@ export default function MySchedule() {
     setDepts(depr.data);
     setSettings(setr.data);
     setLeaves(lr.data || []);
+    setPublicHolidays(phr.data || []);
   };
 
   const navigate = (dir) => {
@@ -93,11 +96,20 @@ export default function MySchedule() {
           <thead>
             <tr style={{ background:'#1a1a2e' }}>
               <th style={{ padding:'10px 14px', textAlign:'left', color:'rgba(255,255,255,0.7)', fontSize:12, fontWeight:600, width:160 }}>Agent</th>
-              {days.map(d => (
-                <th key={String(d)} style={{ padding:'10px 8px', textAlign:'center', color:isToday(d)?'white':'rgba(255,255,255,0.7)', fontSize:12, fontWeight:isToday(d)?800:600, background:isToday(d)?primary:'transparent', minWidth:100 }}>
-                  <div>{format(d,'EEE')}</div><div style={{fontWeight:400,fontSize:11}}>{format(d,'d MMM')}</div>
-                </th>
-              ))}
+              {days.map(d => {
+                const ds = format(d,'yyyy-MM-dd');
+                const holiday = publicHolidays.find(h => h.date === ds);
+                const SA_NAMES = ['Human Rights Day','Family Day','Freedom Day',"Workers' Day",'Youth Day',"National Women's Day",'Heritage Day','Day of Reconciliation','Day of Goodwill'];
+                const PH_NAMES = ['Araw ng Kagitingan','Maundy Thursday','Labour Day','Independence Day','National Heroes Day',"All Saints' Day",'Bonifacio Day','Feast of the Immaculate Conception','Rizal Day'];
+                const holidayFlag = holiday ? (SA_NAMES.includes(holiday.name) ? '🇿🇦' : PH_NAMES.includes(holiday.name) ? '🇵🇭' : '🌍') : null;
+                return (
+                  <th key={String(d)} style={{ padding:'10px 8px', textAlign:'center', color:isToday(d)?'white':holiday?'#fef08a':'rgba(255,255,255,0.7)', fontSize:12, fontWeight:isToday(d)?800:600, background:isToday(d)?primary:holiday?'rgba(234,179,8,0.25)':'transparent', minWidth:100 }}>
+                    <div>{format(d,'EEE')}</div>
+                    <div style={{fontWeight:400,fontSize:11}}>{format(d,'d MMM')}</div>
+                    {holiday && <div style={{ fontSize:9, marginTop:2, color:'#fef08a', fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:90 }}>{holidayFlag} {holiday.name}</div>}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -229,19 +241,32 @@ export default function MySchedule() {
             const myShift = dayShifts.find(s=>s.user_id===user?.id);
             const myLeave = dayLeaves.find(l=>l.user_id===user?.id);
             const totalPeople = new Set(dayShifts.map(s=>s.user_id)).size;
+            const holiday = publicHolidays.find(h => h.date === dayStr);
+            const SA_NAMES = ['Human Rights Day','Family Day','Freedom Day',"Workers' Day",'Youth Day',"National Women's Day",'Heritage Day','Day of Reconciliation','Day of Goodwill'];
+            const PH_NAMES = ['Araw ng Kagitingan','Maundy Thursday','Labour Day','Independence Day','National Heroes Day',"All Saints' Day",'Bonifacio Day','Feast of the Immaculate Conception','Rizal Day'];
+            const holidayFlag = holiday ? (SA_NAMES.includes(holiday.name) ? '🇿🇦' : PH_NAMES.includes(holiday.name) ? '🇵🇭' : '🌍') : null;
 
             return (
               <div key={dayStr}
                 onClick={()=>setExpandedDay(isExpanded ? null : dayStr)}
                 style={{ minHeight:80, padding:6, borderRadius:8, cursor:'pointer',
-                  border:`1.5px solid ${isExpanded?primary:today?primary:isWeekend?'#e8edf2':'#E2E8F0'}`,
-                  background: isExpanded?`${primary}08`:today?`${primary}06`:isWeekend?'#f8fafc':'white',
+                  border:`1.5px solid ${isExpanded?primary:today?primary:holiday?'#ca8a04':isWeekend?'#e8edf2':'#E2E8F0'}`,
+                  background: isExpanded?`${primary}08`:today?`${primary}06`:holiday?'#fefce8':isWeekend?'#f8fafc':'white',
                   transition:'all 0.15s', position:'relative' }}>
 
                 {/* Date number */}
-                <div style={{ fontSize:12, fontWeight:today?800:500, color:today?primary:isWeekend?'var(--gray-400)':'#374151', marginBottom:4 }}>
+                <div style={{ fontSize:12, fontWeight:today?800:500, color:today?primary:holiday?'#92400e':isWeekend?'var(--gray-400)':'#374151', marginBottom:4 }}>
                   {format(day,'d')}
                 </div>
+
+                {/* Public holiday banner */}
+                {holiday && (
+                  <div style={{ fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 5px', marginBottom:3,
+                    background:'#fef08a', color:'#78350f', textAlign:'center',
+                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {holidayFlag} {holiday.name}
+                  </div>
+                )}
 
                 {/* My own shift — always shown */}
                 {myShift && (
