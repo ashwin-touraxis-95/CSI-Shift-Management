@@ -64,7 +64,7 @@ export default function ManageShifts() {
       const r = await axios.post('/api/shifts/bulk', { user_ids:bulk.selected_users, dates, start_time:bulk.start_time, end_time:bulk.end_time, notes:bulk.notes, status:bulk.status, shift_type:bulk.shift_type||'normal' });
       const skipNote = r.data.skipped ? ` (${r.data.skipped} skipped — already had a shift)` : '';
       msg(`✓ Created ${r.data.created} shifts for ${bulk.selected_users.length} agent(s) across ${dates.length} day(s)${bulk.status==='draft'?' — saved as draft':''}!${skipNote}`);
-      setBulk(b => ({...b, selected_users:[]}));
+      setBulk({ name:'', start_time:'07:00', end_time:'15:00', department:'CS', notes:'', status:'draft', shift_type:'normal', selected_users:[], date_from:'', date_to:'', selected_dates:[], _deptFilter:'all' });
       fetchAll();
     } catch(e) { msg(e.response?.data?.error||'Error','error'); }
     setSaving(false);
@@ -125,13 +125,92 @@ export default function ManageShifts() {
 
       {message.text && <div style={{ background: message.type==='error'?'#fef2f2':'#d4edda', border:`1px solid ${message.type==='error'?'#fca5a5':'#c3e6cb'}`, borderRadius:8, padding:'10px 16px', marginBottom:20, color: message.type==='error'?'#dc2626':'#155724', fontSize:14 }}>{message.text}</div>}
 
-      {/* Draft banner */}
+      {/* ── DRAFT MANAGEMENT TABLE ── */}
       {drafts.length > 0 && (
-        <div style={{ background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:10, padding:'14px 20px', marginBottom:24, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
-          <div><strong>📝 {drafts.length} draft shift{drafts.length>1?'s':''}</strong> <span style={{ color:'var(--gray-600)', fontSize:13 }}>— agents cannot see these yet</span></div>
-          <div style={{ display:'flex', gap:10 }}>
-            {selectedDrafts.length > 0 && <button className="btn btn-primary btn-sm" onClick={publishSelected}>Publish Selected ({selectedDrafts.length})</button>}
-            <button className="btn btn-success btn-sm" onClick={publishAll}>Publish All Drafts</button>
+        <div className="card" style={{ padding:0, overflow:'hidden', marginBottom:24 }}>
+          <div style={{ padding:'14px 20px', background:'#1a1a2e', color:'white', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <span style={{ fontWeight:700, fontSize:14 }}>📝 {drafts.length} Draft Shift{drafts.length>1?'s':''}</span>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.5)' }}>Agents cannot see these yet</span>
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {selectedDrafts.length > 0 && (
+                <>
+                  <button className="btn btn-primary btn-sm" onClick={publishSelected}>✅ Publish Selected ({selectedDrafts.length})</button>
+                  <button className="btn btn-danger btn-sm" onClick={async () => {
+                    if (!window.confirm(`Delete ${selectedDrafts.length} draft shift(s)?`)) return;
+                    await Promise.all(selectedDrafts.map(id => axios.delete(`/api/shifts/${id}`)));
+                    setSelectedDrafts([]); fetchAll(); msg(`Deleted ${selectedDrafts.length} draft(s)`);
+                  }}>🗑 Delete Selected</button>
+                </>
+              )}
+              <button className="btn btn-success btn-sm" onClick={publishAll}>✅ Publish All</button>
+              <button className="btn btn-secondary btn-sm" onClick={() =>
+                setSelectedDrafts(selectedDrafts.length === drafts.length ? [] : drafts.map(d => d.id))
+              }>{selectedDrafts.length === drafts.length ? 'Deselect All' : 'Select All'}</button>
+            </div>
+          </div>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+              <thead>
+                <tr style={{ background:'var(--gray-50)', borderBottom:'2px solid var(--gray-200)' }}>
+                  <th style={{ padding:'10px 14px', width:40 }}>
+                    <input type="checkbox"
+                      checked={selectedDrafts.length === drafts.length && drafts.length > 0}
+                      onChange={e => setSelectedDrafts(e.target.checked ? drafts.map(d => d.id) : [])} />
+                  </th>
+                  {['Agent','Dept','Date','Time','Type','Notes','Actions'].map(h => (
+                    <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:0.5 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...drafts].sort((a,b) => a.date.localeCompare(b.date)).map((s, i) => {
+                  const agent = users.find(u => u.id === s.user_id);
+                  const TYPE_LABELS = { normal:'Normal', ot_1_5:'OT @ 1.5', ot_2:'OT @ 2 (PH)', ot_auth:'Auth OT' };
+                  const TYPE_COLORS = { normal:'#16a34a', ot_1_5:'#d97706', ot_2:'#dc2626', ot_auth:'#7c3aed' };
+                  const TYPE_BG    = { normal:'#f0fdf4', ot_1_5:'#fffbeb', ot_2:'#fef2f2', ot_auth:'#ede9fe' };
+                  const isSelected = selectedDrafts.includes(s.id);
+                  return (
+                    <tr key={s.id} style={{ borderBottom:'1px solid var(--gray-100)', background: isSelected ? '#fef9f0' : i%2===0 ? 'white' : 'var(--gray-50)' }}>
+                      <td style={{ padding:'10px 14px' }}>
+                        <input type="checkbox" checked={isSelected}
+                          onChange={e => setSelectedDrafts(prev => e.target.checked ? [...prev, s.id] : prev.filter(x => x !== s.id))} />
+                      </td>
+                      <td style={{ padding:'10px 14px', fontWeight:600 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <div style={{ width:28, height:28, borderRadius:'50%', background:'var(--red)', color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:11, flexShrink:0 }}>
+                            {(agent?.name || s.user_name || '?')[0].toUpperCase()}
+                          </div>
+                          {agent?.name || s.user_name || '—'}
+                        </div>
+                      </td>
+                      <td style={{ padding:'10px 14px', color:'var(--gray-600)' }}>{s.department || agent?.department || '—'}</td>
+                      <td style={{ padding:'10px 14px', fontFamily:'DM Mono', fontSize:12, fontWeight:600 }}>{s.date}</td>
+                      <td style={{ padding:'10px 14px', fontFamily:'DM Mono', fontSize:12 }}>{s.start_time?.slice(0,5)} – {s.end_time?.slice(0,5)}</td>
+                      <td style={{ padding:'10px 14px' }}>
+                        <span style={{ background:TYPE_BG[s.shift_type]||'#f0fdf4', color:TYPE_COLORS[s.shift_type]||'#16a34a', padding:'2px 8px', borderRadius:5, fontSize:11, fontWeight:700 }}>
+                          {TYPE_LABELS[s.shift_type] || 'Normal'}
+                        </span>
+                      </td>
+                      <td style={{ padding:'10px 14px', color:'var(--gray-500)', maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.notes || '—'}</td>
+                      <td style={{ padding:'10px 14px' }}>
+                        <div style={{ display:'flex', gap:6 }}>
+                          <button className="btn btn-primary btn-sm" onClick={async () => {
+                            await axios.post('/api/shifts/publish', { shift_ids:[s.id] });
+                            fetchAll(); msg('Shift published!');
+                          }}>Publish</button>
+                          <button className="btn btn-danger btn-sm" onClick={async () => {
+                            if (!window.confirm('Delete this draft?')) return;
+                            await deleteShift(s.id); msg('Draft deleted');
+                          }}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

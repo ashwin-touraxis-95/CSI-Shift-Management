@@ -25,6 +25,7 @@ export default function Schedule() {
   const [editCell, setEditCell] = useState(null);
   const [editForm, setEditForm] = useState({ start_time:'07:00', end_time:'15:00' });
   const [editSaving, setEditSaving] = useState(false);
+  const [shiftTemplates, setShiftTemplates] = useState([]);
 
   useEffect(() => { fetchData(); }, [view, current]);
 
@@ -40,13 +41,14 @@ export default function Schedule() {
   const fetchData = async () => {
     const { start, end } = getRange();
     const year = format(current, 'yyyy');
-    const [sr, ur, depr, setr, lr, phr] = await Promise.all([
+    const [sr, ur, depr, setr, lr, phr, tr] = await Promise.all([
       axios.get(`/api/shifts?start=${start}&end=${end}`),
       axios.get('/api/users'),
       axios.get('/api/departments'),
       axios.get('/api/theme'),
       axios.get(`/api/leave?start=${start}&end=${end}`).catch(()=>({data:[]})),
       axios.get(`/api/public-holidays?year=${year}`).catch(()=>({data:[]})),
+      axios.get('/api/templates').catch(()=>({data:[]})),
     ]);
     setShifts(sr.data);
     setUsers(ur.data.filter(u => u.active !== 0));
@@ -54,6 +56,7 @@ export default function Schedule() {
     setSettings(setr.data);
     setLeaves(lr.data || []);
     setPublicHolidays(phr.data || []);
+    setShiftTemplates(tr.data || []);
   };
 
   const navigate = (dir) => {
@@ -106,7 +109,7 @@ export default function Schedule() {
       <div title={`${shift.name} · ${shift.start_time}-${shift.end_time}`}
         style={{ fontSize:12, padding:'6px 8px', borderRadius:6, background:dc?dc.bg_color:DEPT_BG[shift.department]||'#eee', color:dc?dc.color:DEPT_COLORS[shift.department]||'#333', marginBottom:3, fontWeight:700, lineHeight:1.5, textAlign:'center' }}>
         <div style={{ textAlign:'center' }}>{shift.start_time?.slice(0,5)}–{shift.end_time?.slice(0,5)}</div>
-        {shift.status==='draft' && <span style={{ fontSize:9 }}>📝</span>}
+        
       </div>
     );
   };
@@ -360,7 +363,7 @@ export default function Schedule() {
                                   <div key={s.id} title={`${s.start_time}-${s.end_time} ${s.department}`}
                                     style={{ fontSize:9,padding:'2px 4px',borderRadius:3,background:bgColor,color:txtColor,marginBottom:2,fontWeight:600,lineHeight:1.3 }}>
                                     {s.start_time.slice(0,5)}–{s.end_time.slice(0,5)}
-                                    {s.status==='draft' && <span> 📝</span>}
+                                    
                                   </div>
                                 );
                               })}
@@ -439,11 +442,11 @@ export default function Schedule() {
         const cellLeave = leaves.find(l => l.user_id===editCell.agent.id && l.date_from<=editCell.date && l.date_to>=editCell.date);
         return (
           <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000 }} onClick={()=>setEditCell(null)}>
-            <div className="card" style={{ padding:28,width:380 }} onClick={e=>e.stopPropagation()}>
+            <div className="card" style={{ padding:28,width:420 }} onClick={e=>e.stopPropagation()}>
               <div style={{ fontWeight:800,fontSize:16,marginBottom:4 }}>
                 {editCell.shift ? '✏️ Change Shift' : '➕ Add Shift'}
               </div>
-              <div style={{ fontSize:13,color:'var(--gray-500)',marginBottom: cellLeave ? 8 : 20 }}>
+              <div style={{ fontSize:13,color:'var(--gray-500)',marginBottom: cellLeave ? 8 : 16 }}>
                 {editCell.agent.name} · {editCell.date}
               </div>
               {cellLeave && (
@@ -451,6 +454,20 @@ export default function Schedule() {
                   ⚠️ <strong>{editCell.agent.name}</strong> has <strong style={{ color: cellLeave.leave_type_color||'#6366f1' }}>{cellLeave.leave_type_name}</strong> on this day.
                   {cellLeave.half_day && <span style={{ color:'var(--gray-500)' }}> ({cellLeave.half_day} half-day)</span>}
                   <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:4 }}>You can still save the shift — useful for half-day scenarios.</div>
+                </div>
+              )}
+              {shiftTemplates.length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <label style={{ fontSize:12,fontWeight:600,color:'var(--gray-600)',display:'block',marginBottom:8 }}>Quick Apply from Template</label>
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    {shiftTemplates.map(t => (
+                      <button key={t.id} onClick={() => setEditForm(f => ({ ...f, start_time:t.start_time, end_time:t.end_time, shift_type: t.shift_type || f.shift_type }))}
+                        style={{ padding:'5px 12px', borderRadius:7, border:'1.5px solid var(--gray-300)', background:'white', color:'var(--gray-700)', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}
+                        title={`${t.start_time}–${t.end_time}${t.notes?' · '+t.notes:''}`}>
+                        {t.name} <span style={{ opacity:0.5, fontWeight:400 }}>{t.start_time?.slice(0,5)}–{t.end_time?.slice(0,5)}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14 }}>
