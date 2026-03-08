@@ -202,12 +202,11 @@ async function initDb() {
     timezone TEXT NOT NULL DEFAULT 'Africa/Johannesburg',
     active INTEGER DEFAULT 1
   )`);
-  // Seed default locations if empty
-  const locCount = await get('SELECT COUNT(*) as c FROM locations');
-  if (!locCount || locCount.c === 0) {
-    await run("INSERT INTO locations(id,code,name,timezone) VALUES($1,'SA','South Africa','Africa/Johannesburg')", [uuidv4()]);
-    await run("INSERT INTO locations(id,code,name,timezone) VALUES($1,'PH','Philippines','Asia/Manila')", [uuidv4()]);
-  }
+  // Seed default locations — always ensure SA and PH exist
+  try { await run("INSERT INTO locations(id,code,name,timezone) VALUES($1,'SA','South Africa','Africa/Johannesburg') ON CONFLICT(code) DO NOTHING", [uuidv4()]); } catch(e) {}
+  try { await run("INSERT INTO locations(id,code,name,timezone) VALUES($1,'PH','Philippines','Asia/Manila') ON CONFLICT(code) DO NOTHING", [uuidv4()]); } catch(e) {}
+  // Also re-activate if previously soft-deleted
+  try { await run("UPDATE locations SET active=1 WHERE code IN ('SA','PH')"); } catch(e) {}
   try { await query("ALTER TABLE shifts ADD COLUMN shift_type TEXT DEFAULT 'normal'"); } catch(e) {}
   try { await query("ALTER TABLE shifts ADD COLUMN ot_authorized_by TEXT DEFAULT NULL"); } catch(e) {}
   try { await query("ALTER TABLE leave_types ADD COLUMN paid_hours REAL DEFAULT 8"); } catch(e) {}

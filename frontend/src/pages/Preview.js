@@ -127,8 +127,8 @@ export default function Preview() {
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <div style={{ width:30, height:30, borderRadius:7, background:primary, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>🏢</div>
                 <div>
-                  <div style={{ fontWeight:700, fontSize:13, color:'white' }}>{previewData.theme?.company_name || 'ShiftManager'}</div>
-                  <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:1 }}>{previewData.theme?.location_label || 'South Africa'}</div>
+                  <div><span style={{ fontWeight:700, fontSize:13, color:'#ffffff' }}>{previewData.theme?.company_name || 'ShiftManager'}</span></div>
+                  <div><span style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:1, display:'block' }}>{previewData.theme?.location_label || 'South Africa'}</span></div>
                 </div>
               </div>
             </div>
@@ -142,18 +142,21 @@ export default function Preview() {
                 { label:'Admin', items: admin },
               ].filter(s => s.items.length > 0).map(section => (
                 <div key={section.label}>
-                  <div style={{ fontSize:9, fontWeight:700, color:sidebarSectionLabel, letterSpacing:1.5, padding:'12px 8px 6px', textTransform:'uppercase' }}>{section.label}</div>
+                  <div style={{ fontSize:9, fontWeight:700, letterSpacing:1.5, padding:'12px 8px 6px', textTransform:'uppercase' }}>
+                    <span style={{ color:'rgba(255,255,255,0.25)' }}>{section.label}</span>
+                  </div>
                   {section.items.map(item => (
                     <div key={item.id}
                       onClick={() => setActivePage(item.id)}
                       style={{
                         display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, marginBottom:1,
                         cursor:'pointer', fontSize:13, fontWeight:500, transition:'all 0.12s',
-                        color: activePage === item.id ? 'white' : sidebarText,
+                        color: activePage === item.id ? '#ffffff' : 'rgba(255,255,255,0.6)',
                         background: activePage === item.id ? primary : 'transparent',
                       }}
                     >
-                      <span style={{ fontSize:13 }}>{item.icon}</span>{item.label}
+                      <span style={{ fontSize:13, flexShrink:0 }}>{item.icon}</span>
+                      <span style={{ color: activePage === item.id ? '#ffffff' : 'rgba(255,255,255,0.6)', fontWeight:500 }}>{item.label}</span>
                     </div>
                   ))}
                 </div>
@@ -167,7 +170,7 @@ export default function Preview() {
                   {u.name?.trim()?.[0]?.toUpperCase()}
                 </div>
                 <div style={{ minWidth:0 }}>
-                  <div style={{ fontWeight:600, fontSize:12, color:'white', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
+                  <div><span style={{ fontWeight:600, fontSize:12, color:'#ffffff' }}>{u.name}</span></div>
                   <div style={{ fontSize:10, marginTop:1 }}>
                     <span style={{ background:USER_TYPE_COLORS[u.user_type]+'30', color:USER_TYPE_COLORS[u.user_type], padding:'1px 6px', borderRadius:8, fontWeight:700 }}>
                       {USER_TYPE_LABELS[u.user_type]||u.user_type}
