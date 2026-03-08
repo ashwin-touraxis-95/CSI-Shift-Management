@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 export default function HoursTracker() {
-  const { user, isAdmin, isManager, isLeader, theme } = useAuth();
+  const { user, isAdmin, isManager, isLeader, isPH, theme } = useAuth();
   const primary = theme?.primary_color || '#C0392B';
 
   // Pay cycle: anchor date per dept navigation; cycle day per dept
@@ -19,10 +19,12 @@ export default function HoursTracker() {
   const [depts, setDepts] = useState([]);
   const [filterDept, setFilterDept] = useState('all');
   const [filterAgent, setFilterAgent] = useState('all');
+  const [filterLocation, setFilterLocation] = useState('all'); // 'all' | 'SA' | 'PH' | etc
   const [hoursTargets, setHoursTargets] = useState({});
   const [leaveTypes, setLeaveTypes] = useState([]); // { id, name, paid_hours }
   const [loading, setLoading] = useState(true);
   const [viewMonth, setViewMonth] = useState(new Date());
+  const [locations, setLocations] = useState([]);
   const payCycleDaysRef = useRef({});
   const [hoursColors, setHoursColors] = useState({
     normal: { bg: '#f0fdf4', text: '#16a34a' },
@@ -68,7 +70,10 @@ export default function HoursTracker() {
 
   // Use the first dept's cycle day for navigation display (or default 1)
   const defaultCycleDay = Object.values(payCycleDays)[0] || 1;
-  const { pStart, pEnd } = getPeriod(cycleAnchor, defaultCycleDay);
+  const saResult = getPeriod(cycleAnchor, defaultCycleDay);
+  // PH users always see 1st–last of month. Admin filtering by PH also sees PH cycle. Others see SA.
+  const viewingAsNonSA = isPH || (filterLocation !== 'all' && filterLocation !== 'SA');
+  const { pStart, pEnd } = viewingAsNonSA ? getMonthPeriod(cycleAnchor) : saResult;
 
   const navigatePeriod = (dir) => {
     setCycleAnchor(prev => {
@@ -83,13 +88,20 @@ export default function HoursTracker() {
   const fetchData = async () => {
     setLoading(true);
     const cd = Object.values(payCycleDaysRef.current)[0] || 1;
-    const { pStart: s, pEnd: e } = getPeriod(cycleAnchor, cd);
+    const { pStart: saSt, pEnd: saEn } = getPeriod(cycleAnchor, cd);
+    // Always fetch a window covering both SA cycle and any non-SA 1st-last-of-month
+    // so mixed-location teams load correctly
+    const d = cycleAnchor instanceof Date ? cycleAnchor : new Date(cycleAnchor);
+    const phSt = new Date(d.getFullYear(), d.getMonth(), 1);
+    const phEn = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    const s = saSt < phSt ? saSt : phSt;
+    const e = saEn > phEn ? saEn : phEn;
     const start = format(s, 'yyyy-MM-dd');
     const end = format(e, 'yyyy-MM-dd');
     const year = format(s, 'yyyy');
     const year2 = format(e, 'yyyy');
     try {
-      const [sr, ur, dr, lr, phr, phr2, tr, ltr] = await Promise.all([
+      const [sr, ur, dr, lr, phr, phr2, tr, ltr, locr] = await Promise.all([
         axios.get(`/api/shifts?start=${start}&end=${end}`),
         axios.get('/api/users'),
         axios.get('/api/departments'),
@@ -98,6 +110,7 @@ export default function HoursTracker() {
         year2!==year ? axios.get(`/api/public-holidays?year=${year2}`).catch(()=>({data:[]})) : Promise.resolve({data:[]}),
         axios.get('/api/theme').catch(()=>({data:{}})),
         axios.get('/api/leave-types').catch(()=>({data:[]})),
+        axios.get('/api/locations').catch(()=>({data:[]})),
       ]);
       setShifts(sr.data);
       setUsers(ur.data.filter(u=>u.active!==0));
@@ -105,6 +118,7 @@ export default function HoursTracker() {
       setLeaves(lr.data||[]);
       setPublicHolidays([...(phr.data||[]), ...(phr2.data||[])]);
       setLeaveTypes(ltr.data||[]);
+      setLocations(Array.isArray(locr.data) ? locr.data : []);
       try {
         const newTargets = JSON.parse(tr.data.hours_targets||'{}');
         const newCycleDays = JSON.parse(tr.data.pay_cycle_days||'{}');
@@ -117,7 +131,40 @@ export default function HoursTracker() {
     setLoading(false);
   };
 
-  const holidayDates = new Set(publicHolidays.map(h=>h.date));
+  // Per-location holiday sets — SA agents use SA holidays, PH agents use PH holidays, etc.
+  const holidayDatesByLocation = {};
+  for (const h of publicHolidays) {
+    const loc = h.location || 'SA';
+    if (!holidayDatesByLocation[loc]) holidayDatesByLocation[loc] = new Set();
+    holidayDatesByLocation[loc].add(h.date);
+  }
+  const getHolidayDates = (agentLocation) => holidayDatesByLocation[agentLocation || 'SA'] || holidayDatesByLocation['SA'] || new Set();
+
+  // PH agents always use 1st–last of month pay cycle regardless of dept setting
+  const getMonthPeriod = (anchor) => {
+    const d = anchor instanceof Date ? anchor : new Date(anchor);
+    const pStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    const pEnd = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    return { pStart, pEnd };
+  };
+
+  // Helper: is a given agent on PH location?
+  const isAgentPH = (agentId) => {
+    const agent = users.find(u => u.id === agentId);
+    return (agent?.location || 'SA') !== 'SA';
+  };
+
+  // Get PH-specific period weeks
+  const { pStart: monthPStart, pEnd: monthPEnd } = getMonthPeriod(cycleAnchor);
+  const monthWeeks = [];
+  let monthWStart = startOfWeek(monthPStart, { weekStartsOn:1 });
+  while (monthWStart <= monthPEnd) {
+    const monthWEnd = endOfWeek(monthWStart, { weekStartsOn:1 });
+    const clippedStart = monthWStart < monthPStart ? monthPStart : monthWStart;
+    const clippedEnd = monthWEnd > monthPEnd ? monthPEnd : monthWEnd;
+    monthWeeks.push({ start:monthWStart, end:monthWEnd, clippedStart, clippedEnd, days:eachDayOfInterval({start:clippedStart,end:clippedEnd}) });
+    monthWStart = addDays(monthWStart,7);
+  }
 
   // All weeks overlapping this pay period
   const weeks = [];
@@ -139,13 +186,14 @@ export default function HoursTracker() {
     return Math.round((mins/60)*10)/10;
   };
 
-  const getAgentWeekData = (agentId, week) => {
+  const getAgentWeekData = (agentId, week, agentLocation) => {
     let normal=0, ot1=0, ot15=0, ot2=0, leaveHrs=0;
+    const agentHolidayDates = getHolidayDates(agentLocation || 'SA');
 
     for (const day of week.days) {
       const ds = format(day,'yyyy-MM-dd');
       const isWeekendDay = [0,6].includes(day.getDay());
-      const isHoliday = holidayDates.has(ds);
+      const isHoliday = agentHolidayDates.has(ds);
 
       // Leave for this day (weekdays only)
       const leave = !isWeekendDay ? leaves.find(l=>l.user_id===agentId&&l.date_from<=ds&&l.date_to>=ds) : null;
@@ -193,9 +241,12 @@ export default function HoursTracker() {
   };
 
   const getAgentMonthTotals = (agentId) => {
+    const agent = users.find(u => u.id === agentId);
+    const agentLoc = agent?.location || 'SA';
+    const agentWeeks = agentLoc !== 'SA' ? monthWeeks : weeks;
     let normal=0, ot1=0, ot15=0, ot2=0, leave=0;
-    for (const week of weeks) {
-      const d = getAgentWeekData(agentId,week);
+    for (const week of agentWeeks) {
+      const d = getAgentWeekData(agentId, week, agentLoc);
       normal+=d.normal; ot1+=d.ot1; ot15+=d.ot15; ot2+=d.ot2; leave+=d.leave;
     }
     const worked = Math.round((normal+ot1+ot15+ot2)*10)/10;
@@ -215,11 +266,15 @@ export default function HoursTracker() {
 
   // Per-dept periods
   const getDeptPeriod = (deptName) => {
+    // PH-located users (or admin filtering by PH) always see 1st–last of month
+    if (isPH || (filterLocation !== 'all' && filterLocation !== 'SA')) return getMonthPeriod(cycleAnchor);
     const cd = payCycleDays[deptName] || defaultCycleDay;
     return getPeriod(cycleAnchor, cd);
   };
 
   const getDeptWeeks = (deptName) => {
+    // PH user or admin filtered to PH — return PH weeks
+    if (isPH || (filterLocation !== 'all' && filterLocation !== 'SA')) return monthWeeks;
     const { pStart: ds, pEnd: de } = getDeptPeriod(deptName);
     const wks = [];
     let wStart = startOfWeek(ds, { weekStartsOn:1 });
@@ -240,7 +295,8 @@ export default function HoursTracker() {
 
   const getAgentsForDept = (deptName) => users.filter(u=>
     u.user_type==='agent' && u.department===deptName &&
-    (filterAgent==='all'||u.id===filterAgent)
+    (filterAgent==='all'||u.id===filterAgent) &&
+    (filterLocation==='all'||(u.location||'SA')===filterLocation)
   );
 
   const downloadPDF = () => {
@@ -270,29 +326,39 @@ export default function HoursTracker() {
     document.body.removeChild(printRoot);
   };
 
-  const downloadCSV = () => {
+  // includePH=false = SA payroll export (no PH staff). includePH=true = full record export
+  const downloadCSV = (includePH = false) => {
     const wkLabels = weeks.map(w=>`Wk${getWeek(w.start)} ${format(w.start,'d/M')}-${format(w.end,'d/M')}`);
-    const headers = ['Agent','Department',
+    const headers = ['Agent','Department','Location',
       ...wkLabels.flatMap(w=>[`${w} Norm`,`${w} OT1.5`,`${w} OT2`,`${w} Leave`,`${w} Total`]),
       'Mth Norm','Mth OT1.5','Mth OT2','Mth Leave','Mth Total','Target','vs Target'
     ];
     const rows = [];
     for (const dept of visibleDepts) {
       for (const agent of getAgentsForDept(dept.name)) {
-        const wData = weeks.map(w=>getAgentWeekData(agent.id,w));
+        const agentLoc = agent.location || 'SA';
+        if (!includePH && agentLoc !== 'SA') continue; // exclude non-SA agents from SA payroll export
+        const agentWeeks = agentLoc !== 'SA' ? monthWeeks : weeks;
+        const wData = agentWeeks.map(w=>getAgentWeekData(agent.id, w, agentLoc));
         const m = getAgentMonthTotals(agent.id);
         const target = hoursTargets[dept.name]||160;
+        const vs = m.total - target;
         rows.push([
-          agent.name, dept.name,
+          agent.name, dept.name, agentLoc,
           ...wData.flatMap(d=>[d.normal,d.ot15,d.ot2,d.leave,d.total]),
-          m.normal,m.ot15,m.ot2,m.leave,m.total
+          m.normal,m.ot15,m.ot2,m.leave,m.total, target, vs>=0?`+${vs}`:vs
         ]);
       }
     }
-    const csv = [headers,...rows].map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
+    const csv = [headers,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv],{type:'text/csv'});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');a.href=url;a.download=`hours-${format(pStart,'yyyy-MM-dd')}_${format(pEnd,'yyyy-MM-dd')}.csv`;a.click();
+    const a = document.createElement('a');
+    a.href=url;
+    a.download = includePH
+      ? `hours-full-record-${format(pStart,'yyyy-MM-dd')}.csv`
+      : `hours-payroll-SA-${format(pStart,'yyyy-MM-dd')}.csv`;
+    a.click();
   };
 
   const Cell = ({val, bg, color, bold, right}) => (
@@ -312,7 +378,7 @@ export default function HoursTracker() {
         <div>
           <h1 style={{ margin:0 }}>Hours Tracker</h1>
           <p style={{ margin:'4px 0 0', color:'var(--gray-500)', fontSize:14 }}>
-            {restrictedToDept ? `${restrictedToDept} department` : 'All departments'} — monthly hours breakdown
+            {restrictedToDept ? `${restrictedToDept} department` : 'All departments'}{filterLocation !== 'all' ? ` · ${locations.find(l=>l.code===filterLocation)?.name || filterLocation}` : ''} — monthly hours breakdown
           </p>
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
@@ -321,7 +387,16 @@ export default function HoursTracker() {
               🎨 {showColorEditor ? 'Hide' : 'Edit'} Colours
             </button>
           )}
-          <button onClick={downloadCSV} className="btn btn-primary" style={{ fontSize:13 }}>⬇ Download CSV</button>
+          {(isAdmin || isManager) && (
+            <div style={{ display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
+              <button onClick={()=>downloadCSV(false)} className="btn btn-primary" style={{ fontSize:13 }}>
+                ⬇ Payroll CSV <span style={{ fontSize:11, opacity:0.8, marginLeft:4 }}>(SA only)</span>
+              </button>
+              <button onClick={()=>downloadCSV(true)} className="btn btn-secondary" style={{ fontSize:12, padding:'4px 10px' }}>
+                📋 Full Record CSV <span style={{ fontSize:11, opacity:0.7, marginLeft:2 }}>(all locations)</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -465,25 +540,37 @@ export default function HoursTracker() {
         <button onClick={()=>navigatePeriod(1)} className="btn btn-secondary" style={{ fontSize:13, padding:'6px 12px' }}>Next →</button>
         <button onClick={()=>setCycleAnchor(new Date())} className="btn btn-secondary" style={{ fontSize:13, padding:'6px 12px' }}>Current</button>
 
-        {/* Filters — admin only sees all */}
-        {isAdmin && (
-          <>
-            <select value={filterDept} onChange={e=>{setFilterDept(e.target.value);setFilterAgent('all');}}
-              style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit' }}>
-              <option value="all">All Departments</option>
-              {depts.map(d=><option key={d.id} value={d.name}>{d.name}</option>)}
-            </select>
-            <select value={filterAgent} onChange={e=>setFilterAgent(e.target.value)}
-              style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit' }}>
-              <option value="all">All Agents</option>
-              {users.filter(u=>u.user_type==='agent'&&(filterDept==='all'||u.department===filterDept)).map(u=>(
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </>
+        {/* Location filter — admin and manager */}
+        {(isAdmin || isManager) && locations.length > 1 && (
+          <select value={filterLocation} onChange={e=>{setFilterLocation(e.target.value);setFilterAgent('all');}}
+            style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit', background: filterLocation==='SA'?'#f0fdf4': filterLocation!=='all'?'#eff6ff':'white' }}>
+            <option value="all">🌍 All Locations</option>
+            {locations.map(l=><option key={l.code} value={l.code}>{l.code === 'SA' ? '🇿🇦' : l.code === 'PH' ? '🇵🇭' : '📍'} {l.name}</option>)}
+          </select>
         )}
-        {/* Non-admin: show their dept name as read-only */}
-        {!isAdmin && (
+        {/* Dept filter — admin only (managers locked to their dept) */}
+        {isAdmin && (
+          <select value={filterDept} onChange={e=>{setFilterDept(e.target.value);setFilterAgent('all');}}
+            style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit' }}>
+            <option value="all">All Departments</option>
+            {depts.map(d=><option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+        )}
+        {/* Agent filter — admin and manager */}
+        {(isAdmin || isManager) && (
+          <select value={filterAgent} onChange={e=>setFilterAgent(e.target.value)}
+            style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit' }}>
+            <option value="all">All Agents</option>
+            {users.filter(u=>u.user_type==='agent'
+              && (filterDept==='all'||u.department===filterDept)
+              && (filterLocation==='all'||(u.location||'SA')===filterLocation)
+            ).map(u=>(
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        )}
+        {/* Non-admin non-manager: read-only dept label */}
+        {!isAdmin && !isManager && (
           <span style={{ padding:'7px 14px', borderRadius:8, background:'var(--gray-100)', fontSize:13, fontWeight:600, color:'var(--gray-600)' }}>
             🏢 {restrictedToDept}
           </span>
@@ -529,38 +616,61 @@ export default function HoursTracker() {
                           </td>;
                         })()}
                       </tr>
-                      {dagents.map((agent, i) => {
-                        const dWks = getDeptWeeks(dept.name);
-                        const m = (() => {
-                          let normal=0,ot1=0,ot15=0,ot2=0,leave=0;
-                          for (const wk of dWks) { const d=getAgentWeekData(agent.id,wk); normal+=d.normal;ot1+=d.ot1;ot15+=d.ot15;ot2+=d.ot2;leave+=d.leave; }
-                          const worked=Math.round((normal+ot1+ot15+ot2)*10)/10;
-                          const total=Math.round((worked+leave)*10)/10;
-                          const balance=Math.round((total-normal-ot1-ot15-ot2-leave)*10)/10;
-                          return { normal:Math.round(normal*10)/10,ot1:Math.round(ot1*10)/10,ot15:Math.round(ot15*10)/10,ot2:Math.round(ot2*10)/10,leave:Math.round(leave*10)/10,worked,total,balance };
-                        })();
-                        const hasData = m.total > 0;
-                        return (
-                          <tr key={agent.id} style={{ background: i%2===0?'white':'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
-                            <td style={{ padding:'10px 16px', fontWeight:600 }}>
-                              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                <div style={{ width:26,height:26,borderRadius:'50%',background:primary,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0 }}>
-                                  {agent.name?.trim()?.[0]?.toUpperCase()}
-                                </div>
-                                {agent.name}
-                              </div>
-                            </td>
-                            <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:800, fontSize:14, color:'#1a1a2e', background:'#f8fafc' }}>{hasData?m.total:'—'}</td>
-                            <td style={{ padding:'10px 12px', textAlign:'right', color:hc.normal.text, fontWeight:600, background:m.normal>0?hc.normal.bg:undefined }}>{m.normal||'—'}</td>
-                            <td style={{ padding:'10px 12px', textAlign:'right', color:'#c2410c', fontWeight:600, background:m.ot1>0?'#fff7ed':undefined }}>{m.ot1||'—'}</td>
-                            <td style={{ padding:'10px 12px', textAlign:'right', color:hc.ot15.text, fontWeight:600, background:m.ot15>0?hc.ot15.bg:undefined }}>{m.ot15||'—'}</td>
-                            <td style={{ padding:'10px 12px', textAlign:'right', color:hc.ot2.text, fontWeight:600, background:m.ot2>0?hc.ot2.bg:undefined }}>{m.ot2||'—'}</td>
-                            <td style={{ padding:'10px 12px', textAlign:'right', color:hc.leave.text, fontWeight:600, background:m.leave>0?hc.leave.bg:undefined }}>
-                              {m.leave?`(${m.leave})`:'—'}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {(() => {
+                        // Sort SA agents first, PH agents after, with a separator row between them
+                        // Sort SA first, then group non-SA by location code
+                        const saAgents = dagents.filter(a => (a.location||'SA') === 'SA');
+                        const nonSAGroups = {};
+                        dagents.filter(a => (a.location||'SA') !== 'SA').forEach(a => {
+                          const loc = a.location || '??';
+                          if (!nonSAGroups[loc]) nonSAGroups[loc] = [];
+                          nonSAGroups[loc].push(a);
+                        });
+                        const nonSAAgents = Object.values(nonSAGroups).flat();
+                        const hasMixed = saAgents.length > 0 && nonSAAgents.length > 0;
+                        const ordered = [...saAgents, ...nonSAAgents];
+                        // Track which agent is the first in each non-SA location group
+                        const firstOfLoc = {};
+                        Object.entries(nonSAGroups).forEach(([loc, agents]) => { firstOfLoc[agents[0].id] = loc; });
+                        return ordered.map((agent, i) => {
+                          const agentLoc = agent.location || 'SA';
+                          const isPHAgent = agentLoc !== 'SA';
+                          const isLocHeader = firstOfLoc[agent.id];
+                          const locName = locations.find(l => l.code === agentLoc)?.name || agentLoc;
+                          const m = getAgentMonthTotals(agent.id);
+                          const hasData = m.total > 0;
+                          return (
+                            <React.Fragment key={agent.id}>
+                              {isLocHeader && (
+                                <tr>
+                                  <td colSpan={7} style={{ padding:'5px 16px 5px 24px', background:'#dbeafe', fontSize:11, fontWeight:700, color:'#1d4ed8', letterSpacing:0.3 }}>
+                                    📍 {locName} — Record Only · excluded from SA Payroll CSV · pay cycle: 1st – last of month
+                                  </td>
+                                </tr>
+                              )}
+                              <tr style={{ background: isPHAgent ? '#f0f4ff' : i%2===0?'white':'#f8fafc', borderBottom:'1px solid #f1f5f9', opacity: isPHAgent ? 0.85 : 1 }}>
+                                <td style={{ padding:'10px 16px', fontWeight:600 }}>
+                                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    <div style={{ width:26,height:26,borderRadius:'50%',background: isPHAgent?'#3B82F6':primary,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0 }}>
+                                      {agent.name?.trim()?.[0]?.toUpperCase()}
+                                    </div>
+                                    <span>{agent.name}</span>
+                                    {isPHAgent && <span title={`${agentLoc} — record only, excluded from SA payroll export`} style={{ fontSize:10, fontWeight:700, background:'#dbeafe', color:'#1d4ed8', padding:'1px 6px', borderRadius:4, letterSpacing:0.3 }}>{agentLoc}</span>}
+                                  </div>
+                                </td>
+                                <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:800, fontSize:14, color:'#1a1a2e', background:'#f8fafc' }}>{hasData?m.total:'—'}</td>
+                                <td style={{ padding:'10px 12px', textAlign:'right', color:hc.normal.text, fontWeight:600, background:m.normal>0?hc.normal.bg:undefined }}>{m.normal||'—'}</td>
+                                <td style={{ padding:'10px 12px', textAlign:'right', color:'#c2410c', fontWeight:600, background:m.ot1>0?'#fff7ed':undefined }}>{m.ot1||'—'}</td>
+                                <td style={{ padding:'10px 12px', textAlign:'right', color:hc.ot15.text, fontWeight:600, background:m.ot15>0?hc.ot15.bg:undefined }}>{m.ot15||'—'}</td>
+                                <td style={{ padding:'10px 12px', textAlign:'right', color:hc.ot2.text, fontWeight:600, background:m.ot2>0?hc.ot2.bg:undefined }}>{m.ot2||'—'}</td>
+                                <td style={{ padding:'10px 12px', textAlign:'right', color:hc.leave.text, fontWeight:600, background:m.leave>0?hc.leave.bg:undefined }}>
+                                  {m.leave?`(${m.leave})`:'—'}
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        });
+                      })()}
                     </React.Fragment>
                   );
                 })}
@@ -666,18 +776,21 @@ export default function HoursTracker() {
                     })();
                       const diff = Math.round((month.worked - (hoursTargets[dept.name]||160))*10)/10;
                       const diffColor = diff>=0?'#16a34a':'#dc2626';
+                      const isPHAgentW = (agent.location || 'SA') !== 'SA';
+                      const wRowBg = isPHAgentW ? '#f0f4ff' : i%2===0?'white':'#f8fafc';
                       return (
-                        <tr key={agent.id} style={{ background:i%2===0?'white':'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
-                          <td style={{ padding:'8px 14px', fontWeight:600, whiteSpace:'nowrap', position:'sticky', left:0, background:i%2===0?'white':'#f8fafc', zIndex:1 }}>
+                        <tr key={agent.id} style={{ background:wRowBg, borderBottom:'1px solid #f1f5f9', opacity: isPHAgentW?0.85:1 }}>
+                          <td style={{ padding:'8px 14px', fontWeight:600, whiteSpace:'nowrap', position:'sticky', left:0, background:wRowBg, zIndex:1 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                              <div style={{ width:24,height:24,borderRadius:'50%',background:primary,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0 }}>
+                              <div style={{ width:24,height:24,borderRadius:'50%',background:isPHAgentW?'#3B82F6':primary,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0 }}>
                                 {agent.name?.trim()?.[0]?.toUpperCase()}
                               </div>
-                              {agent.name}
+                              <span>{agent.name}</span>
+                              {isPHAgentW && <span title={`${agent.location} — record only`} style={{ fontSize:10, fontWeight:700, background:'#dbeafe', color:'#1d4ed8', padding:'1px 5px', borderRadius:4 }}>{agent.location}</span>}
                             </div>
                           </td>
                           {getDeptWeeks(dept.name).map(week=>{
-                            const d = getAgentWeekData(agent.id,week);
+                            const d = getAgentWeekData(agent.id, week, agent.location || 'SA');
                             return (
                               <React.Fragment key={week.start}>
                                 <Cell val={d.normal||null} bg={hc.normal.bg} color={hc.normal.text}/>
@@ -707,7 +820,8 @@ export default function HoursTracker() {
         </div>
       )}
       <p style={{ marginTop:10, fontSize:11, color:'var(--gray-400)' }}>
-        Normal = scheduled weekday hours · Weekend shifts = OT@1.5 · SA public holidays = OT@2 · Half-day leave = 4hrs · Full-day leave = 8hrs
+        Normal = scheduled weekday hours · Weekend = OT@1.5 · Public holidays = OT@2 (per agent's location) · Half-day leave = 4hrs · Full-day leave = 8hrs
+        <br/><span style={{ color:'#1d4ed8' }}>Non-SA rows</span> are shown for record only — excluded from the Payroll CSV export. Use "Full Record CSV" to include all locations.
       </p>
     </div>
   );

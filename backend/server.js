@@ -575,6 +575,11 @@ app.put('/api/locations/:id', requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 app.delete('/api/locations/:id', requireAdmin, async (req, res) => {
+  const loc = await get('SELECT code FROM locations WHERE id=$1', [req.params.id]);
+  if (loc && loc.code !== 'SA') {
+    // Reassign all users on this location to SA
+    await run("UPDATE users SET location='SA', timezone='Africa/Johannesburg' WHERE location=$1", [loc.code]);
+  }
   await run('UPDATE locations SET active=0 WHERE id=$1', [req.params.id]);
   res.json({ ok: true });
 });
@@ -714,19 +719,26 @@ app.get('/api/audit-log', requireAdmin, async (req, res) => res.json(await all('
 // ── PUBLIC HOLIDAYS ───────────────────────────────────────────────────────────
 app.get('/api/public-holidays', requireAuth, async (req, res) => {
   const { year } = req.query;
-  let q = 'SELECT * FROM public_holidays ORDER BY date';
-  const rows = year ? await all('SELECT * FROM public_holidays WHERE date LIKE $1 ORDER BY date', [`${year}-%`]) : await all(q);
+  const rows = year
+    ? await all('SELECT * FROM public_holidays WHERE date LIKE $1 ORDER BY date', [`${year}-%`])
+    : await all('SELECT * FROM public_holidays ORDER BY date');
   res.json(rows);
 });
 app.post('/api/public-holidays', requireAuth, async (req, res) => {
   if (!['account_admin','manager','team_leader'].includes(req.user.user_type)) return res.status(403).json({ error:'Not allowed' });
-  const { date, name } = req.body;
+  const { date, name, location = 'SA' } = req.body;
   if (!date || !name) return res.status(400).json({ error:'Date and name required' });
-  const existing = await get('SELECT id FROM public_holidays WHERE date=$1', [date]);
-  if (existing) return res.status(400).json({ error:'Holiday already exists for this date' });
+  const existing = await get('SELECT id FROM public_holidays WHERE date=$1 AND location=$2', [date, location]);
+  if (existing) return res.status(400).json({ error:'Holiday already exists for this date and location' });
   const id = uuidv4();
-  await run('INSERT INTO public_holidays(id,date,name,created_by) VALUES($1,$2,$3,$4)', [id, date, name, req.session.userId]);
+  await run('INSERT INTO public_holidays(id,date,name,location,created_by) VALUES($1,$2,$3,$4,$5)', [id, date, name, location, req.session.userId]);
   res.json({ id, ok:true });
+});
+app.put('/api/public-holidays/:id', requireAuth, async (req, res) => {
+  if (!['account_admin','manager','team_leader'].includes(req.user.user_type)) return res.status(403).json({ error:'Not allowed' });
+  const { name, location } = req.body;
+  await run('UPDATE public_holidays SET name=$1, location=$2 WHERE id=$3', [name, location || 'SA', req.params.id]);
+  res.json({ ok:true });
 });
 app.delete('/api/public-holidays/:id', requireAuth, async (req, res) => {
   if (!['account_admin','manager','team_leader'].includes(req.user.user_type)) return res.status(403).json({ error:'Not allowed' });

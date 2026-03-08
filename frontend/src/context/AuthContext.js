@@ -82,7 +82,7 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.user_type === 'account_admin';
   const isManager = user?.user_type === 'manager' || isAdmin;
   const isLeader = user?.user_type === 'team_leader' || isManager;
-  const isPH = user?.location === 'PH';
+  const isPH = (user?.location || 'SA') !== 'SA'; // true for ANY non-SA location
   const needsOnboarding = user && user.user_type === 'agent' && !user.onboarded;
 
   return (

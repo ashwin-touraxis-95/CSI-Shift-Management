@@ -21,6 +21,8 @@ export default function Schedule() {
   const [leaves, setLeaves] = useState([]);
   const [filterDept, setFilterDept] = useState(isAdmin ? 'all' : (user?.department || 'all'));
   const [filterAgent, setFilterAgent] = useState('all');
+  const [filterLocation, setFilterLocation] = useState('all');
+  const [locations, setLocations] = useState([]);
   const [publicHolidays, setPublicHolidays] = useState([]);
   const [editCell, setEditCell] = useState(null);
   const [editForm, setEditForm] = useState({ start_time:'07:00', end_time:'15:00' });
@@ -41,7 +43,7 @@ export default function Schedule() {
   const fetchData = async () => {
     const { start, end } = getRange();
     const year = format(current, 'yyyy');
-    const [sr, ur, depr, setr, lr, phr, tr] = await Promise.all([
+    const [sr, ur, depr, setr, lr, phr, tr, locr] = await Promise.all([
       axios.get(`/api/shifts?start=${start}&end=${end}`),
       axios.get('/api/users'),
       axios.get('/api/departments'),
@@ -49,6 +51,7 @@ export default function Schedule() {
       axios.get(`/api/leave?start=${start}&end=${end}`).catch(()=>({data:[]})),
       axios.get(`/api/public-holidays?year=${year}`).catch(()=>({data:[]})),
       axios.get('/api/templates').catch(()=>({data:[]})),
+      axios.get('/api/locations').catch(()=>({data:[]})),
     ]);
     setShifts(sr.data);
     setUsers(ur.data.filter(u => u.active !== 0));
@@ -57,6 +60,7 @@ export default function Schedule() {
     setLeaves(lr.data || []);
     setPublicHolidays(phr.data || []);
     setShiftTemplates(tr.data || []);
+    setLocations(Array.isArray(locr?.data) ? locr.data : []);
   };
 
   const navigate = (dir) => {
@@ -119,7 +123,8 @@ export default function Schedule() {
     const dayStr = format(current,'yyyy-MM-dd');
     const agents = users.filter(u => u.user_type === 'agent'
       && (filterDept === 'all' || u.department === filterDept)
-      && (filterAgent === 'all' || u.id === filterAgent));
+      && (filterAgent === 'all' || u.id === filterAgent)
+      && (filterLocation === 'all' || (u.location||'SA') === filterLocation));
     const byDept = agents.reduce((acc,u) => { if(!acc[u.department])acc[u.department]=[]; acc[u.department].push(u); return acc; },{});
     const hasAnything = agents.length > 0;
     return (
@@ -178,7 +183,8 @@ export default function Schedule() {
     const days = Array.from({length:7},(_,i)=>addDays(weekStart,i));
     const agents = users.filter(u=>u.user_type==='agent'
       && (filterDept==='all' || u.department===filterDept)
-      && (filterAgent==='all' || u.id===filterAgent));
+      && (filterAgent==='all' || u.id===filterAgent)
+      && (filterLocation==='all' || (u.location||'SA')===filterLocation));
     const byDept = agents.reduce((acc,u)=>{if(!acc[u.department])acc[u.department]=[];acc[u.department].push(u);return acc;},{});
     return (
       <div className="card" style={{ overflow:'auto' }}>
@@ -265,7 +271,8 @@ export default function Schedule() {
     const allDates = eachDayOfInterval({ start:startOfMonth(current), end:endOfMonth(current) });
     const filteredAgents = users.filter(u => u.user_type==='agent'
       && (filterDept==='all' || u.department===filterDept)
-      && (filterAgent==='all' || u.id===filterAgent));
+      && (filterAgent==='all' || u.id===filterAgent)
+      && (filterLocation==='all' || (u.location||'SA')===filterLocation));
     const agentIds = new Set(filteredAgents.map(u=>u.id));
     const filteredLeaves = leaves.filter(l => agentIds.has(l.user_id));
 
@@ -417,6 +424,14 @@ export default function Schedule() {
           <button className="btn btn-secondary btn-sm" onClick={()=>navigate(-1)}>← Prev</button>
           <button className="btn btn-secondary btn-sm" onClick={()=>setCurrent(new Date())}>Today</button>
           <button className="btn btn-secondary btn-sm" onClick={()=>navigate(1)}>Next →</button>
+          {/* Location filter — admin and manager, only shown if multiple locations exist */}
+          {(isAdmin || isManager) && locations.length > 1 && (
+            <select value={filterLocation} onChange={e=>{setFilterLocation(e.target.value);setFilterAgent('all');}}
+              style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit', background: filterLocation==='SA'?'#f0fdf4': filterLocation!=='all'?'#eff6ff':'white' }}>
+              <option value="all">🌍 All Locations</option>
+              {locations.map(l=><option key={l.code} value={l.code}>{l.code==='SA'?'🇿🇦':l.code==='PH'?'🇵🇭':'📍'} {l.name}</option>)}
+            </select>
+          )}
           {/* Dept filter */}
           <select value={filterDept} onChange={e=>{ setFilterDept(e.target.value); setFilterAgent('all'); }}
             style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit' }}>
@@ -427,7 +442,7 @@ export default function Schedule() {
           <select value={filterAgent} onChange={e=>setFilterAgent(e.target.value)}
             style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:13, fontFamily:'inherit' }}>
             <option value="all">All Agents</option>
-            {users.filter(u=>u.user_type==='agent'&&(filterDept==='all'||u.department===filterDept)).map(u=>(
+            {users.filter(u=>u.user_type==='agent'&&(filterDept==='all'||u.department===filterDept)&&(filterLocation==='all'||(u.location||'SA')===filterLocation)).map(u=>(
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>

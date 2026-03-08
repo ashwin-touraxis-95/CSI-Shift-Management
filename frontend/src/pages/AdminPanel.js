@@ -98,6 +98,7 @@ export default function AdminPanel() {
   const [locations, setLocations] = useState([]);
   const [newLocation, setNewLocation] = useState({ code:'', name:'', timezone:'Africa/Johannesburg' });
   const [locationMsg, setLocationMsg] = useState({ text:'', type:'' });
+  const [editingLocation, setEditingLocation] = useState(null); // { id, name, timezone }
 
   const BREAK_EMOJIS = [
     '🍽️','☕','🚻','📋','📚','🙏','💤','🏃','🎮','📱',
@@ -196,7 +197,7 @@ export default function AdminPanel() {
       { date:`${holidayYear}-12-25`, name:'Christmas Day' },
       { date:`${holidayYear}-12-30`, name:'Rizal Day' },
     ];
-    const list = country === 'SA' ? SA_HOLIDAYS : PH_HOLIDAYS;
+    const list = (country === 'SA' ? SA_HOLIDAYS : PH_HOLIDAYS).map(h => ({ ...h, location: country }));
     let added = 0;
     for (const h of list) {
       try { await axios.post('/api/public-holidays', h); added++; } catch {}
@@ -802,10 +803,13 @@ export default function AdminPanel() {
                   {holidays.map((h,i) => {
                     const d = new Date(h.date+'T12:00:00');
                     const isWeekend = [0,6].includes(d.getDay());
-                    const SA_NAMES = ['Human Rights Day','Family Day','Freedom Day',"Workers' Day",'Youth Day',"National Women's Day",'Heritage Day','Day of Reconciliation','Day of Goodwill'];
-                    const PH_NAMES = ['Araw ng Kagitingan','Maundy Thursday','Labour Day','Independence Day','National Heroes Day',"All Saints' Day",'Bonifacio Day','Feast of the Immaculate Conception','Rizal Day'];
-                    const isSA = SA_NAMES.includes(h.name);
-                    const isPH = PH_NAMES.includes(h.name);
+                    const locCode = h.location || 'SA';
+                    const locLabel = locCode === 'SA' ? '🇿🇦 South Africa' : locCode === 'PH' ? '🇵🇭 Philippines' : locCode;
+                    const locStyle = locCode === 'SA'
+                      ? { background:'#f0fdf4', color:'#15803d' }
+                      : locCode === 'PH'
+                      ? { background:'#eff6ff', color:'#1d4ed8' }
+                      : { background:'#f3f4f6', color:'#374151' };
                     return (
                       <tr key={h.id} style={{ borderBottom:'1px solid var(--gray-100)', background:i%2===0?'white':'var(--gray-50)' }}>
                         <td style={{ padding:'10px 16px', fontFamily:'DM Mono', fontSize:13, fontWeight:600 }}>{h.date}</td>
@@ -815,9 +819,7 @@ export default function AdminPanel() {
                         </td>
                         <td style={{ padding:'10px 16px', fontSize:13, fontWeight:500 }}>{h.name}</td>
                         <td style={{ padding:'10px 16px', fontSize:13 }}>
-                          {isSA && <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#f0fdf4', color:'#15803d', padding:'2px 8px', borderRadius:6, fontSize:12, fontWeight:600 }}>🇿🇦 South Africa</span>}
-                          {isPH && <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eff6ff', color:'#1d4ed8', padding:'2px 8px', borderRadius:6, fontSize:12, fontWeight:600 }}>🇵🇭 Philippines</span>}
-                          {!isSA && !isPH && <span style={{ color:'var(--gray-400)', fontSize:12 }}>—</span>}
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'2px 8px', borderRadius:6, fontSize:12, fontWeight:600, ...locStyle }}>{locLabel}</span>
                         </td>
                         <td style={{ padding:'10px 16px', textAlign:'right' }}>
                           <button onClick={()=>deleteHoliday(h.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:16 }}>🗑</button>
@@ -1125,7 +1127,18 @@ export default function AdminPanel() {
             setTimeout(() => setLocationMsg({ text:'', type:'' }), 3000);
           }
         };
-        const handleDeleteLocation = async (id) => {
+        const handleSaveLocation = async () => {
+          if (!editingLocation) return;
+          try {
+            await axios.put(`/api/locations/${editingLocation.id}`, { name: editingLocation.name, timezone: editingLocation.timezone });
+            setEditingLocation(null);
+            fetchAll();
+            setLocationMsg({ text:'Location updated!', type:'success' });
+            setTimeout(() => setLocationMsg({ text:'', type:'' }), 2000);
+          } catch(e) {
+            setLocationMsg({ text: e.response?.data?.error || 'Error saving', type:'error' });
+          }
+        };
           if (!window.confirm('Remove this location? Users assigned to it will keep their current location code.')) return;
           try { await axios.delete(`/api/locations/${id}`); fetchAll(); setLocationMsg({ text:'Location removed', type:'success' }); setTimeout(() => setLocationMsg({ text:'', type:'' }), 2000); } catch(e) {}
         };
@@ -1150,19 +1163,48 @@ export default function AdminPanel() {
                   {locations.length === 0 && <tr><td colSpan={5} style={{ padding:30, textAlign:'center', color:'var(--gray-400)' }}>No locations yet</td></tr>}
                   {locations.map(loc => {
                     const userCount = allUsers.filter(u => (u.location || 'SA') === loc.code).length;
+                    const isEditing = editingLocation?.id === loc.id;
                     return (
-                      <tr key={loc.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
+                      <tr key={loc.id} style={{ borderBottom:'1px solid var(--gray-100)', background: isEditing?'#fffbeb':'white' }}>
                         <td style={{ padding:'10px 14px' }}>
                           <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background:'#EFF6FF', color:'#1D4ED8' }}>{loc.code}</span>
                         </td>
-                        <td style={{ padding:'10px 14px', fontWeight:600 }}>{loc.name}</td>
-                        <td style={{ padding:'10px 14px', color:'var(--gray-500)', fontSize:13, fontFamily:'DM Mono' }}>{loc.timezone}</td>
+                        <td style={{ padding:'10px 14px', fontWeight:600 }}>
+                          {isEditing
+                            ? <input value={editingLocation.name} onChange={e=>setEditingLocation(p=>({...p,name:e.target.value}))} style={{ maxWidth:200, padding:'4px 8px' }}/>
+                            : loc.name}
+                        </td>
+                        <td style={{ padding:'10px 14px', color:'var(--gray-500)', fontSize:13, fontFamily:'DM Mono' }}>
+                          {isEditing
+                            ? <select value={editingLocation.timezone} onChange={e=>setEditingLocation(p=>({...p,timezone:e.target.value}))} style={{ fontSize:12 }}>
+                                {[
+                                  'Africa/Johannesburg','Asia/Manila','Europe/London','America/New_York',
+                                  'America/Chicago','America/Los_Angeles','Europe/Paris','Asia/Dubai',
+                                  'Asia/Kolkata','Australia/Sydney','UTC'
+                                ].map(tz=><option key={tz} value={tz}>{tz}</option>)}
+                              </select>
+                            : loc.timezone}
+                        </td>
                         <td style={{ padding:'10px 14px', color:'var(--gray-500)', fontSize:13 }}>{userCount} user{userCount !== 1 ? 's' : ''}</td>
                         <td style={{ padding:'10px 14px' }}>
-                          <button onClick={() => handleDeleteLocation(loc.id)}
-                            style={{ padding:'4px 12px', borderRadius:6, border:'1px solid #fca5a5', background:'#fef2f2', color:'#dc2626', fontSize:12, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
-                            Remove
-                          </button>
+                          {isEditing
+                            ? <div style={{ display:'flex', gap:6 }}>
+                                <button onClick={handleSaveLocation} className="btn btn-success btn-sm">Save</button>
+                                <button onClick={()=>setEditingLocation(null)} className="btn btn-secondary btn-sm">Cancel</button>
+                              </div>
+                            : <div style={{ display:'flex', gap:6 }}>
+                                <button onClick={() => setEditingLocation({ id:loc.id, name:loc.name, timezone:loc.timezone })}
+                                  style={{ padding:'4px 12px', borderRadius:6, border:'1px solid var(--gray-200)', background:'white', color:'var(--gray-600)', fontSize:12, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                                  Edit
+                                </button>
+                                {loc.code !== 'SA' && (
+                                  <button onClick={() => handleDeleteLocation(loc.id)}
+                                    style={{ padding:'4px 12px', borderRadius:6, border:'1px solid #fca5a5', background:'#fef2f2', color:'#dc2626', fontSize:12, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                          }
                         </td>
                       </tr>
                     );

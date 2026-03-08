@@ -7,6 +7,8 @@ export default function ManageShifts() {
   const [shifts, setShifts] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [depts, setDepts] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [locationFilter, setLocationFilter] = useState('all');
   const [viewMonth, setViewMonth] = useState(new Date());
   const [tab, setTab] = useState('bulk');
   const [message, setMessage] = useState({ text:'', type:'success' });
@@ -32,15 +34,17 @@ export default function ManageShifts() {
   useEffect(() => { fetchAll(); }, [viewMonth]);
 
   const fetchAll = async () => {
-    const [ur, tr, dr, depr, lr] = await Promise.all([
+    const [ur, tr, dr, depr, locr, lr] = await Promise.all([
       axios.get('/api/users'), axios.get('/api/templates'),
       axios.get(`/api/shifts?start=${format(startOfMonth(viewMonth),'yyyy-MM-dd')}&end=${format(endOfMonth(viewMonth),'yyyy-MM-dd')}`),
       axios.get('/api/departments'),
+      axios.get('/api/locations').catch(()=>({data:[]})),
       axios.get(`/api/leave?start=${format(startOfMonth(viewMonth),'yyyy-MM-dd')}&end=${format(endOfMonth(viewMonth),'yyyy-MM-dd')}`).catch(()=>({data:[]})),
     ]);
     const activeAgents = ur.data.filter(u => u.user_type === 'agent' && u.active !== 0);
     setUsers(activeAgents);
     setTemplates(tr.data); setShifts(dr.data); setDepts(depr.data.map(d=>d.name).filter(n=>n!=='Management'));
+    setLocations(Array.isArray(locr?.data) ? locr.data : []);
     // Build leave users list (unique users with leave in this month)
     const leaveUserIds = [...new Set((lr.data||[]).map(l => l.user_id))];
     const leaveAgents = activeAgents.filter(u => leaveUserIds.includes(u.id));
@@ -115,7 +119,8 @@ export default function ManageShifts() {
   const dates = generateDates();
   const drafts = shifts.filter(s => s.status === 'draft');
   const published = shifts.filter(s => s.status === 'published');
-  const agentsByDept = users.reduce((acc, u) => { if (!acc[u.department]) acc[u.department]=[]; acc[u.department].push(u); return acc; }, {});
+  const filteredByLocation = locationFilter === 'all' ? users : users.filter(u => (u.location||'SA') === locationFilter);
+  const agentsByDept = filteredByLocation.reduce((acc, u) => { if (!acc[u.department]) acc[u.department]=[]; acc[u.department].push(u); return acc; }, {});
 
   return (
     <div>
@@ -202,6 +207,18 @@ export default function ManageShifts() {
                 <button className="btn btn-secondary btn-sm" onClick={()=>setBulk(b=>({...b,selected_users:[]}))}>None</button>
               </div>
             </div>
+            {/* Location filter — only shown if multiple locations exist */}
+            {locations.length > 1 && (
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                <span style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', alignSelf:'center', textTransform:'uppercase', letterSpacing:0.5 }}>Location:</span>
+                <button onClick={()=>setLocationFilter('all')} style={{ padding:'3px 10px', borderRadius:6, border:'1.5px solid', borderColor:locationFilter==='all'?'#2563eb':'var(--gray-300)', background:locationFilter==='all'?'#2563eb':'white', color:locationFilter==='all'?'white':'var(--gray-700)', fontSize:11, fontWeight:600, cursor:'pointer' }}>All</button>
+                {locations.map(l => (
+                  <button key={l.code} onClick={()=>setLocationFilter(l.code)} style={{ padding:'3px 10px', borderRadius:6, border:'1.5px solid', borderColor:locationFilter===l.code?'#2563eb':'var(--gray-300)', background:locationFilter===l.code?'#2563eb':'white', color:locationFilter===l.code?'white':'var(--gray-700)', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                    {l.code==='SA'?'🇿🇦':l.code==='PH'?'🇵🇭':'📍'} {l.name}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Department filter */}
             <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}>
               <button onClick={()=>setBulk(b=>({...b,_deptFilter:'all'}))} style={{ padding:'4px 10px', borderRadius:6, border:'1.5px solid', borderColor:(bulk._deptFilter||'all')==='all'?'var(--red)':'var(--gray-300)', background:(bulk._deptFilter||'all')==='all'?'var(--red)':'white', color:(bulk._deptFilter||'all')==='all'?'white':'var(--gray-700)', fontSize:11, fontWeight:600, cursor:'pointer' }}>All</button>
@@ -247,6 +264,7 @@ export default function ManageShifts() {
                         {u.avatar ? <img src={u.avatar} alt="" style={{ width:28, height:28, borderRadius:'50%' }} />
                           : <div style={{ width:28, height:28, borderRadius:'50%', background:'var(--gray-300)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700 }}>{u.name[0]}</div>}
                         <span style={{ fontSize:13, fontWeight:500 }}>{u.name}</span>
+                        {(u.location||'SA') !== 'SA' && <span style={{ fontSize:10, fontWeight:700, background:'#dbeafe', color:'#1d4ed8', padding:'1px 5px', borderRadius:4, marginLeft:'auto' }}>{u.location}</span>}
                       </div>
                     ))}
                   </div>

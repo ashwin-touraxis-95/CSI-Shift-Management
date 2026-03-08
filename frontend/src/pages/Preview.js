@@ -19,7 +19,7 @@ const ALL_MODULES = [
 ];
 
 function canSee(mod, userType, perms, isPH) {
-  if (mod.hidePH && isPH) return false;
+  if (mod.hidePH && isPH) return false; // hidePH = hide for ANY non-SA location
   if (mod.perm && !perms[mod.perm]) return false;
   if (!mod.roles) return true;
   if (mod.roles.includes('all')) return true;
@@ -30,10 +30,22 @@ function canSee(mod, userType, perms, isPH) {
 }
 
 // Simulated page previews
-function PagePreview({ pageId, user }) {
+function PagePreview({ pageId, user, liveUsers = [], liveShifts = [] }) {
   const u = user;
   const isManager = ['manager','account_admin'].includes(u.user_type);
   const isLeader = u.user_type === 'team_leader' || isManager;
+
+  // Filter to what this user can see
+  const visibleUsers = isManager
+    ? liveUsers
+    : liveUsers.filter(lu => lu.department === u.department);
+
+  const today = new Date();
+  const visibleShifts = liveShifts.filter(s =>
+    isManager ? true : s.department === u.department || s.user_id === u.id
+  ).slice(0, 8);
+
+  const deptUsers = visibleUsers.filter(lu => lu.user_type === 'agent').slice(0, 6);
 
   const card = (children, extra={}) => (
     <div style={{ background:'white', borderRadius:10, border:'1px solid #e5e7eb', padding:20, ...extra }}>{children}</div>
@@ -46,51 +58,40 @@ function PagePreview({ pageId, user }) {
     </div>
   );
 
-  const fakeShifts = [
-    { name: u.name, time:'08:00 – 17:00', dept: u.department, status:'published' },
-    { name:'Sample Agent', time:'09:00 – 18:00', dept: u.department, status:'published' },
-    { name:'Another Agent', time:'12:00 – 21:00', dept: u.department, status:'draft' },
-  ];
-
-  const fakeUsers = [
-    { name: u.name, role: USER_TYPE_LABELS[u.user_type], dept: u.department, status:'Active' },
-    { name:'Sample Agent A', role:'Agent', dept: u.department, status:'Active' },
-    { name:'Sample Agent B', role:'Agent', dept: u.department, status:'Active' },
-  ];
+  const myShifts = liveShifts.filter(s => String(s.user_id) === String(u.id)).slice(0, 5);
 
   switch(pageId) {
     case 'dashboard': return (
       <div>
         <p style={{ color:'#6b7280', marginBottom:16, fontSize:14 }}>Welcome back, <strong>{u.name}</strong>.</p>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:12, marginBottom:20 }}>
-          {tile('Shifts This Month','12')}
-          {tile('Total Hours','96h','#2980B9')}
-          {tile('On Leave','2','#E67E22')}
-          {tile('This Week','5','#27AE60')}
+          {tile('My Shifts This Month', myShifts.length || '0')}
+          {tile('Dept Users', visibleUsers.length, '#2980B9')}
+          {tile('Shifts Visible', visibleShifts.length, '#27AE60')}
         </div>
-        {card(<div style={{ color:'#9ca3af', fontSize:13, textAlign:'center', padding:20 }}>📊 Live availability board — agents from {u.department}</div>)}
+        {card(<div style={{ color:'#9ca3af', fontSize:13, textAlign:'center', padding:20 }}>📊 Live availability board — agents from {isManager?'all departments':u.department}</div>)}
       </div>
     );
 
     case 'my-schedule': return (
       <div>
         <p style={{ color:'#6b7280', marginBottom:16, fontSize:14 }}>Your upcoming shifts — <strong>{u.department}</strong></p>
-        {card(
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:14 }}>
-            <thead><tr style={{ borderBottom:'2px solid #f3f4f6' }}>
-              {['Date','Shift','Hours','Status'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:12, color:'#9ca3af', fontWeight:600, textTransform:'uppercase' }}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {[['Mon 10 Mar','08:00 – 17:00','9h','Published'],['Tue 11 Mar','08:00 – 17:00','9h','Published'],['Wed 12 Mar','Day Off','—','—']].map(([d,s,h,st])=>(
-                <tr key={d} style={{ borderBottom:'1px solid #f3f4f6' }}>
-                  <td style={{ padding:'10px 12px', fontWeight:600 }}>{d}</td>
-                  <td style={{ padding:'10px 12px', color:'#374151' }}>{s}</td>
-                  <td style={{ padding:'10px 12px', color:'#6b7280' }}>{h}</td>
-                  <td style={{ padding:'10px 12px' }}><span style={{ padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background: st==='Published'?'#d1fae5':'#f3f4f6', color: st==='Published'?'#065f46':'#6b7280' }}>{st}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {card(myShifts.length === 0
+          ? <div style={{ textAlign:'center', padding:20, color:'#9ca3af' }}>No shifts scheduled for this user this month</div>
+          : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:14 }}>
+              <thead><tr style={{ borderBottom:'2px solid #f3f4f6' }}>
+                {['Date','Time','Status'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:12, color:'#9ca3af', fontWeight:600, textTransform:'uppercase' }}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {myShifts.map((s,i)=>(
+                  <tr key={i} style={{ borderBottom:'1px solid #f3f4f6' }}>
+                    <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.date||'—'}</td>
+                    <td style={{ padding:'10px 12px', color:'#374151' }}>{s.start_time&&s.end_time?`${s.start_time} – ${s.end_time}`:'—'}</td>
+                    <td style={{ padding:'10px 12px' }}><span style={{ padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background: s.published?'#d1fae5':'#fef3c7', color: s.published?'#065f46':'#92400e' }}>{s.published?'Published':'Draft'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
         )}
       </div>
     );
@@ -99,25 +100,25 @@ function PagePreview({ pageId, user }) {
       <div>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
           <span style={{ padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, background:'#e5e7eb', color:'#374151' }}>{u.department}</span>
-          {isManager && <span style={{ fontSize:12, color:'#9ca3af' }}>Switch: CS · Sales · Travel Agents · Management</span>}
+          {isManager && <span style={{ fontSize:12, color:'#9ca3af' }}>Can switch to any department</span>}
           {!isManager && isLeader && <span style={{ fontSize:12, color:'#9ca3af' }}>Can switch departments</span>}
         </div>
         {card(
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:14 }}>
             <thead><tr style={{ borderBottom:'2px solid #f3f4f6' }}>
-              {['Agent','Mon','Tue','Wed','Thu','Fri'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:12, color:'#9ca3af', fontWeight:600 }}>{h}</th>)}
+              {['Agent','Date','Time','Status'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:12, color:'#9ca3af', fontWeight:600 }}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {fakeShifts.map(s=>(
-                <tr key={s.name} style={{ borderBottom:'1px solid #f3f4f6' }}>
-                  <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.name}</td>
-                  {['08–17','08–17','OFF','08–17','08–17'].map((t,i)=>(
-                    <td key={i} style={{ padding:'8px 12px' }}>
-                      <span style={{ padding:'3px 8px', borderRadius:6, fontSize:11, fontWeight:600, background: t==='OFF'?'#f3f4f6':'#dbeafe', color: t==='OFF'?'#9ca3af':'#1d4ed8' }}>{t}</span>
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {visibleShifts.length===0
+                ? <tr><td colSpan={4} style={{ padding:20, textAlign:'center', color:'#9ca3af' }}>No shifts found for {isManager?'any department':u.department}</td></tr>
+                : visibleShifts.map((s,i)=>(
+                  <tr key={i} style={{ borderBottom:'1px solid #f3f4f6' }}>
+                    <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.user_name||'—'}</td>
+                    <td style={{ padding:'10px 12px', color:'#6b7280' }}>{s.date||'—'}</td>
+                    <td style={{ padding:'10px 12px' }}>{s.start_time&&s.end_time?`${s.start_time}–${s.end_time}`:'—'}</td>
+                    <td style={{ padding:'10px 12px' }}><span style={{ padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background: s.published?'#d1fae5':'#fef3c7', color: s.published?'#065f46':'#92400e' }}>{s.published?'Published':'Draft'}</span></td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         )}
@@ -177,16 +178,44 @@ function PagePreview({ pageId, user }) {
       </div>
     );
 
-    case 'hours': return (
-      <div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
-          {tile('This Week','44h / 45h','#27AE60')}
-          {tile('Overtime','2h','#E67E22')}
-          {tile('This Month','176h','#2980B9')}
+    case 'hours': {
+      const uLoc = u.location || 'SA';
+      const isPHUser = uLoc !== 'SA'; // any non-SA location gets month cycle + local holidays
+      const now = new Date();
+      const monthName = now.toLocaleString('en-ZA',{month:'long',year:'numeric'});
+      const lastDay = new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+      const cycleLabel = isPHUser ? `1 – ${lastDay} ${monthName}` : 'SA dept cycle';
+      const holidayNote = isPHUser ? `📍 ${uLoc} public holidays applied` : '🇿🇦 SA public holidays applied';
+      const myHours = liveShifts.filter(s => String(s.user_id) === String(u.id));
+      const totalHrs = myHours.reduce((sum,s) => {
+        if (!s.start_time || !s.end_time) return sum;
+        const [sh,sm] = s.start_time.split(':').map(Number);
+        const [eh,em] = s.end_time.split(':').map(Number);
+        let mins = (eh*60+em)-(sh*60+sm);
+        if (mins<0) mins+=1440;
+        return sum + Math.round((mins/60)*10)/10;
+      }, 0);
+      return (
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, padding:'8px 12px', background: isPHUser?'#eff6ff':'#f0fdf4', borderRadius:8, fontSize:13 }}>
+            <span>{isPHUser ? '📍' : '🇿🇦'}</span>
+            <span style={{ fontWeight:600 }}>{u.location || 'SA'} — {cycleLabel}</span>
+            <span style={{ color:'#6b7280', marginLeft:8 }}>{holidayNote}</span>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
+            {tile('Shifts This Month', myHours.length || '0', '#27AE60')}
+            {tile('Total Hours', totalHrs || '0', '#2980B9')}
+            {tile('Location', uLoc, isPHUser?'#2563eb':'#15803d')}
+          </div>
+          {card(
+            <div style={{ fontSize:13, color:'#6b7280', textAlign:'center', padding:20 }}>
+              Hours calculated against <strong>{uLoc} public holidays</strong> — {isManager?'can view all departments':u.department+' dept only'}
+              {isPHUser && <div style={{ marginTop:8, color:'#1d4ed8', fontSize:12 }}>{uLoc} staff are shown for record only in SA payroll exports</div>}
+            </div>
+          )}
         </div>
-        {card(<div style={{ color:'#9ca3af', fontSize:13, textAlign:'center', padding:20 }}>⏱️ Detailed hours breakdown for {u.department} — filtered to {isManager ? 'all departments' : u.department}</div>)}
-      </div>
-    );
+      );
+    }
 
     case 'logs': return (
       <div>
@@ -211,13 +240,35 @@ function PagePreview({ pageId, user }) {
       </div>
     );
 
-    case 'admin': return card(
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10 }}>
-        {['🎨 Theme','📺 Display','🏢 Structure','👁 Visibility','📍 Locations','☕ Breaks','📊 Hours','🗓 Holidays','📋 Audit'].map(t=>(
-          <div key={t} style={{ padding:'14px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'#f9fafb', fontSize:13, fontWeight:600, cursor:'pointer' }}>{t}</div>
-        ))}
-      </div>
-    );
+    case 'admin': {
+      const isAccountAdmin = u.user_type === 'account_admin';
+      const isManagerRole = u.user_type === 'manager' || isAccountAdmin;
+      const tabs = [
+        { label:'🎨 Theme', show: isAccountAdmin },
+        { label:'📺 Display', show: isAccountAdmin },
+        { label:'🏢 Structure', show: isManagerRole },
+        { label:'👁 Visibility', show: isAccountAdmin },
+        { label:'📍 Locations', show: isAccountAdmin },
+        { label:'☕ Breaks', show: isManagerRole },
+        { label:'📊 Hours Targets', show: isManagerRole },
+        { label:'🗓 Holidays', show: true },
+        { label:'📊 Sheets Sync', show: isAccountAdmin },
+        { label:'🔐 Permissions', show: isAccountAdmin },
+        { label:'📋 Audit Log', show: isAccountAdmin },
+      ].filter(t => t.show);
+      return card(
+        <div>
+          <p style={{ fontSize:13, color:'#6b7280', marginBottom:14 }}>
+            {isAccountAdmin ? 'Full admin access' : isManagerRole ? 'Manager-level access — some tabs restricted' : 'Team Leader — limited to shared tabs'}
+          </p>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10 }}>
+            {tabs.map(t=>(
+              <div key={t.label} style={{ padding:'14px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'#f9fafb', fontSize:13, fontWeight:600 }}>{t.label}</div>
+            ))}
+          </div>
+        </div>
+      );
+    }
 
     case 'team': return (
       <div>
@@ -231,11 +282,13 @@ function PagePreview({ pageId, user }) {
               {['Name','Role','Department','Status'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:12, color:'#9ca3af', fontWeight:600, textTransform:'uppercase' }}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {fakeUsers.map(fu=>(
-                <tr key={fu.name} style={{ borderBottom:'1px solid #f3f4f6' }}>
+              {visibleUsers.length===0
+                ? <tr><td colSpan={4} style={{ padding:20, textAlign:'center', color:'#9ca3af' }}>No users visible</td></tr>
+                : visibleUsers.slice(0,8).map(fu=>(
+                <tr key={fu.id} style={{ borderBottom:'1px solid #f3f4f6' }}>
                   <td style={{ padding:'10px 12px', fontWeight:600 }}>{fu.name}</td>
-                  <td style={{ padding:'10px 12px', color:'#6b7280' }}>{fu.role}</td>
-                  <td style={{ padding:'10px 12px' }}><span style={{ padding:'3px 8px', borderRadius:20, fontSize:11, fontWeight:600, background:'#f3f4f6' }}>{fu.dept}</span></td>
+                  <td style={{ padding:'10px 12px', color:'#6b7280' }}>{USER_TYPE_LABELS[fu.user_type]||fu.user_type}</td>
+                  <td style={{ padding:'10px 12px' }}><span style={{ padding:'3px 8px', borderRadius:20, fontSize:11, fontWeight:600, background:'#f3f4f6' }}>{fu.department}</span></td>
                   <td style={{ padding:'10px 12px' }}><span style={{ color:'#27AE60', fontWeight:600, fontSize:13 }}>● Active</span></td>
                 </tr>
               ))}
@@ -260,14 +313,21 @@ export default function Preview() {
   const [previewData, setPreviewData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [activePage, setActivePage] = useState('dashboard');
+  const [liveUsers, setLiveUsers] = useState([]);
+  const [liveShifts, setLiveShifts] = useState([]);
 
   useEffect(() => {
     axios.get('/api/users').then(r => {
       const users = Array.isArray(r.data) ? r.data.filter(u => u.active !== 0) : [];
       setAllUsers(users);
+      setLiveUsers(users);
       if (users.length > 0) setSelectedId(String(users[0].id));
     }).catch(() => {});
     axios.get('/api/locations').then(r => setLocations(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    const now = new Date();
+    axios.get(`/api/shifts?month=${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`).then(r => {
+      setLiveShifts(Array.isArray(r.data) ? r.data : []);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -282,7 +342,7 @@ export default function Preview() {
 
   const u = previewData?.user;
   const perms = previewData?.permissions || {};
-  const isPH = u?.location === 'PH';
+  const isPH = (u?.location || 'SA') !== 'SA'; // true for any non-SA location
   const locationName = locations.find(l => l.code === u?.location)?.name || u?.location || 'SA';
   const navModules = u ? ALL_MODULES.filter(m => canSee(m, u.user_type, perms, isPH)) : [];
   const sections = ['menu','management','logs','admin'];
@@ -345,7 +405,7 @@ export default function Preview() {
                         style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px', borderRadius:7, marginBottom:1, cursor:'pointer',
                           background: activePage === item.id ? primary : 'transparent' }}>
                         <span style={{ fontSize:14, flexShrink:0 }}>{item.icon}</span>
-                        <span style={{ fontSize:13, fontWeight: activePage===item.id?700:500, color: activePage===item.id?'#ffffff':'rgba(255,255,255,0.72)' }}>{item.label}</span>
+                        <span style={{ fontSize:13, fontWeight: activePage===item.id?700:400, color:'#ffffff', opacity: activePage===item.id?1:0.75 }}>{item.label}</span>
                       </div>
                     ))}
                   </div>
@@ -371,7 +431,7 @@ export default function Preview() {
           <div style={{ flex:1, minWidth:0 }}>
             {isPH && (
               <div style={{ background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:8, padding:'8px 14px', fontSize:13, color:'#92400e', marginBottom:12 }}>
-                🇵🇭 <strong>Philippines user</strong> — Leave Tracker and Payroll Export are hidden.
+                📍 <strong>{u.location} user</strong> — Leave Tracker and Payroll Export are hidden. Hours tracked on 1st–last of month cycle.
               </div>
             )}
             <div style={{ background:'#f3f4f6', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 16px', marginBottom:16, fontSize:13, color:'#374151' }}>
@@ -389,7 +449,7 @@ export default function Preview() {
               </div>
               {/* Page content */}
               <div style={{ padding:20 }}>
-                <PagePreview pageId={activePage} user={u} />
+                <PagePreview pageId={activePage} user={u} liveUsers={liveUsers} liveShifts={liveShifts} />
               </div>
             </div>
           </div>

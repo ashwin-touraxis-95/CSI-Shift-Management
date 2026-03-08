@@ -164,9 +164,15 @@ async function initDb() {
   await query(`CREATE TABLE IF NOT EXISTS team_leader_agents (leader_id TEXT NOT NULL, agent_id TEXT NOT NULL, PRIMARY KEY (leader_id, agent_id))`);
 
   await query(`CREATE TABLE IF NOT EXISTS public_holidays (
-    id TEXT PRIMARY KEY, date TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+    id TEXT PRIMARY KEY, date TEXT NOT NULL, name TEXT NOT NULL,
+    location TEXT DEFAULT 'SA',
     created_by TEXT, created_at TIMESTAMP DEFAULT NOW()
   )`);
+  // Migration: add location column and fix unique constraint for existing deployments
+  try { await query("ALTER TABLE public_holidays ADD COLUMN location TEXT DEFAULT 'SA'"); } catch(e) {}
+  try { await query("UPDATE public_holidays SET location='SA' WHERE location IS NULL"); } catch(e) {}
+  try { await query("ALTER TABLE public_holidays DROP CONSTRAINT IF EXISTS public_holidays_date_key"); } catch(e) {}
+  try { await query("ALTER TABLE public_holidays ADD CONSTRAINT ph_date_loc_unique UNIQUE(date,location)"); } catch(e) {}
 
   await query(`CREATE TABLE IF NOT EXISTS leave_types (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT DEFAULT '#6366f1',
