@@ -1139,7 +1139,8 @@ export default function AdminPanel() {
             setLocationMsg({ text: e.response?.data?.error || 'Error saving', type:'error' });
           }
         };
-          if (!window.confirm('Remove this location? Users assigned to it will keep their current location code.')) return;
+        const handleDeleteLocation = async (id) => {
+          if (!window.confirm('Remove this location? Users assigned to it will be defaulted to South Africa.')) return;
           try { await axios.delete(`/api/locations/${id}`); fetchAll(); setLocationMsg({ text:'Location removed', type:'success' }); setTimeout(() => setLocationMsg({ text:'', type:'' }), 2000); } catch(e) {}
         };
         return (
