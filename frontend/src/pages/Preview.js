@@ -2,6 +2,98 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
+const USER_TYPE_LABELS = { account_admin:'Account Admin', manager:'Manager', team_leader:'Team Leader', agent:'Agent' };
+const USER_TYPE_COLORS = { account_admin:'#C0392B', manager:'#2980B9', team_leader:'#8E44AD', agent:'#27AE60' };
+
+const ALL_MODULES = [
+  { id:'dashboard',      icon:'⚡', label:'Dashboard',         section:'menu',       roles:['all'] },
+  { id:'my-schedule',    icon:'📅', label:'My Schedule',        section:'menu',       roles:['agent'] },
+  { id:'schedule',       icon:'📊', label:'Team Schedule',      section:'menu',       roles:['team_leader','manager','account_admin'] },
+  { id:'manage-shifts',  icon:'✏️', label:'Manage Shifts',      section:'management', perm:'manage_shifts' },
+  { id:'leave',          icon:'🏖️', label:'Leave Tracker',      section:'management', roles:['team_leader','manager','account_admin'], hidePH:true },
+  { id:'hours',          icon:'⏱️', label:'Hours Tracker',      section:'management', roles:['team_leader','manager','account_admin'] },
+  { id:'logs',           icon:'📋', label:'Clock Logs',         section:'logs',       perm:'view_clock_logs' },
+  { id:'admin',          icon:'🛡️', label:'Admin Panel',        section:'admin',      roles:['team_leader','manager','account_admin'] },
+  { id:'team',           icon:'👤', label:'User Management',    section:'admin',      roles:['team_leader','manager','account_admin'] },
+  { id:'preview',        icon:'👁',  label:'Preview as User',   section:'admin',      roles:['account_admin'] },
+];
+
+function canSee(mod, userType, perms, isPH) {
+  if (mod.hidePH && isPH) return false;
+  if (mod.perm && !perms[mod.perm]) return false;
+  if (mod.roles) {
+    if (mod.roles.includes('all')) return true;
+    if (userType === 'account_admin') return true;
+    if (userType === 'manager' && mod.roles.some(r => ['manager','team_leader','agent'].includes(r))) return true;
+    if (userType === 'team_leader' && mod.roles.some(r => ['team_leader','agent'].includes(r))) return true;
+    return mod.roles.includes(userType);
+  }
+  return true;
+}
+
+const PAGE_CONTENT = {
+  dashboard: { title:'Dashboard', render:(u) => (
+    <div>
+      <p style={{color:'var(--gray-500)',marginBottom:20}}>Welcome back, {u.name}. Here's your overview.</p>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12}}>
+        {['Shifts This Month','Total Hours','On Leave','Upcoming'].map(t=>(
+          <div key={t} style={{background:'var(--gray-50)',borderRadius:10,padding:'16px 18px',border:'1px solid var(--gray-200)'}}>
+            <div style={{fontSize:11,color:'var(--gray-400)',fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>{t}</div>
+            <div style={{fontSize:28,fontWeight:800,marginTop:6,color:'var(--gray-700)'}}>—</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )},
+  'my-schedule': { title:'My Schedule', render:(u)=>(
+    <div>
+      <p style={{color:'var(--gray-500)',marginBottom:16}}>Shifts for <strong>{u.name}</strong> — {u.department}</p>
+      <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>📅 Personal shift calendar</div>
+    </div>
+  )},
+  schedule: { title:'Team Schedule', render:(u)=>(
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+        <span style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:700,background:'var(--gray-100)'}}>Dept: {u.department}</span>
+        {['manager','account_admin'].includes(u.user_type) && <span style={{fontSize:12,color:'var(--gray-400)'}}>+ can switch to any department</span>}
+      </div>
+      <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>📊 Schedule grid — defaults to {u.department}</div>
+    </div>
+  )},
+  'manage-shifts': { title:'Manage Shifts', render:()=>(
+    <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>✏️ Shift assignment interface</div>
+  )},
+  leave: { title:'Leave Tracker', render:(u)=>(
+    <div>
+      <p style={{color:'var(--gray-500)',marginBottom:16}}>Leave for <strong>{u.department}</strong></p>
+      <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>🏖️ Leave requests and approvals</div>
+    </div>
+  )},
+  hours: { title:'Hours Tracker', render:(u)=>(
+    <div>
+      <p style={{color:'var(--gray-500)',marginBottom:16}}>Hours for <strong>{u.department}</strong></p>
+      <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>⏱️ Time tracking and overtime reports</div>
+    </div>
+  )},
+  logs: { title:'Clock Logs', render:()=>(
+    <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>📋 Clock in/out history</div>
+  )},
+  admin: { title:'Admin Panel', render:()=>(
+    <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>🛡️ Admin settings — theme, structure, permissions</div>
+  )},
+  team: { title:'User Management', render:(u)=>(
+    <div>
+      <p style={{color:'var(--gray-500)',marginBottom:16}}>
+        {['account_admin','manager'].includes(u.user_type) ? 'Can manage all users' : `Can manage agents in ${u.department}`}
+      </p>
+      <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>👤 User list and management</div>
+    </div>
+  )},
+  preview: { title:'Preview as User', render:()=>(
+    <div style={{border:'1px solid var(--gray-200)',borderRadius:10,padding:24,textAlign:'center',color:'var(--gray-400)'}}>👁 Admin-only — preview any user's experience</div>
+  )},
+};
+
 export default function Preview() {
   const { theme } = useAuth();
   const primary = theme?.primary_color || '#C0392B';
@@ -18,7 +110,7 @@ export default function Preview() {
     axios.get('/api/users').then(r => {
       const users = Array.isArray(r.data) ? r.data.filter(u => u.active !== 0) : [];
       setAllUsers(users);
-      if (users.length > 0) setSelectedId(users[0].id);
+      if (users.length > 0) setSelectedId(String(users[0].id));
     }).catch(() => {});
     axios.get('/api/locations').then(r => setLocations(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }, []);
@@ -35,212 +127,139 @@ export default function Preview() {
 
   const u = previewData?.user;
   const perms = previewData?.permissions || {};
-
-  const isAdmin = u?.user_type === 'account_admin';
-  const isManager = u?.user_type === 'manager' || isAdmin;
-  const isLeader = u?.user_type === 'team_leader' || isManager;
-  const isAgent = u?.user_type === 'agent';
   const isPH = u?.location === 'PH';
-
-  const USER_TYPE_LABELS = { account_admin:'Account Admin', manager:'Manager', team_leader:'Team Leader', agent:'Agent' };
-  const USER_TYPE_COLORS = { account_admin:'#C0392B', manager:'#2980B9', team_leader:'#8E44AD', agent:'#27AE60' };
-
-  // Build what nav items this user would see
-  const buildNav = () => {
-    const menu = [{ id:'dashboard', icon:'⚡', label:'Dashboard' }];
-    if (isLeader || isManager || isAdmin) menu.push({ id:'schedule', icon:'📊', label:'Team Schedule' });
-    if (isAgent) menu.push({ id:'my-schedule', icon:'📅', label:'My Schedule' });
-
-    const management = [];
-    if (perms.manage_shifts) management.push({ id:'manage-shifts', icon:'✏️', label:'Manage Shifts' });
-    // Leave Tracker hidden for PH agents
-    if ((isLeader || isManager || isAdmin) && !isPH) management.push({ id:'leave', icon:'🏖️', label:'Leave Tracker' });
-    if (isLeader || isManager || isAdmin) management.push({ id:'hours', icon:'📊', label:'Hours Tracker' });
-
-    const logs = [];
-    if (perms.view_clock_logs) logs.push({ id:'logs', icon:'📋', label:'Logs' });
-
-    const admin = [];
-    if (isAdmin || isManager || isLeader) admin.push({ id:'admin', icon:'🛡️', label:'Admin Panel' });
-    if (isManager || isLeader || isAdmin) admin.push({ id:'team', icon:'👤', label:'User Management' });
-
-    return { menu, management, logs, admin };
-  };
-
-  const { menu, management, logs, admin } = previewData ? buildNav() : { menu:[], management:[], logs:[], admin:[] };
-  const allNavItems = [...menu, ...management, ...logs, ...admin];
-
-  const sidebarDivider = 'rgba(255,255,255,0.07)';
-  const sidebarText = 'rgba(255,255,255,0.5)';
-  const sidebarSectionLabel = 'rgba(255,255,255,0.25)';
+  const locationName = locations.find(l => l.code === u?.location)?.name || u?.location || 'SA';
+  const navModules = u ? ALL_MODULES.filter(m => canSee(m, u.user_type, perms, isPH)) : [];
+  const sections = ['menu','management','logs','admin'];
+  const activeModule = ALL_MODULES.find(m => m.id === activePage);
+  const pageContent = PAGE_CONTENT[activePage];
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ marginBottom:24 }}>
-        <h1 style={{ margin:0, marginBottom:4 }}>👁 Preview as User</h1>
-        <p style={{ color:'var(--gray-500)', margin:0, fontSize:14 }}>
-          See exactly what any user's app looks like — their navigation, access, and restrictions.
-        </p>
+      <div style={{marginBottom:20}}>
+        <h1 style={{margin:0,marginBottom:4}}>👁 Preview as User</h1>
+        <p style={{color:'var(--gray-500)',margin:0,fontSize:14}}>See exactly what any user experiences — click sidebar items to preview each page.</p>
       </div>
 
-      {/* User selector */}
-      <div className="card" style={{ padding:'16px 20px', marginBottom:24, display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
-        <div style={{ fontWeight:700, fontSize:13, color:'var(--gray-600)', flexShrink:0 }}>Previewing as:</div>
-        <select
-          value={selectedId}
-          onChange={e => setSelectedId(e.target.value)}
-          style={{ padding:'8px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontSize:14, fontFamily:'inherit', minWidth:260, cursor:'pointer' }}
-        >
-          {allUsers.map(u => (
-            <option key={u.id} value={u.id}>
-              {u.name} — {u.user_type?.replace('_',' ')} · {u.department} · {u.location || 'SA'}
+      <div className="card" style={{padding:'14px 20px',marginBottom:20,display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+        <div style={{fontWeight:600,fontSize:13,color:'var(--gray-600)',flexShrink:0}}>Previewing as:</div>
+        <select value={selectedId} onChange={e=>setSelectedId(e.target.value)}
+          style={{padding:'7px 12px',borderRadius:8,border:'1.5px solid var(--gray-200)',fontSize:14,fontFamily:'inherit',flex:1,minWidth:240,cursor:'pointer'}}>
+          {allUsers.map(u=>(
+            <option key={u.id} value={String(u.id)}>
+              {u.name} — {USER_TYPE_LABELS[u.user_type]||u.user_type} · {u.department} · {u.location||'SA'}
             </option>
           ))}
         </select>
         {u && (
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginLeft:'auto' }}>
-            <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background: isPH?'#FEF3C7':'#EFF6FF', color: isPH?'#92400E':'#1D4ED8' }}>
-              {locations.find(l => l.code === u?.location)?.name || u?.location || 'SA'}
-            </span>
-            <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background: USER_TYPE_COLORS[u.user_type]+'20', color: USER_TYPE_COLORS[u.user_type] }}>
-              {USER_TYPE_LABELS[u.user_type] || u.user_type}
-            </span>
-            <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:600, background:'var(--gray-100)', color:'var(--gray-600)' }}>
-              {u.department}
-            </span>
+          <div style={{display:'flex',gap:8,flexShrink:0}}>
+            <span style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:700,background:'#EFF6FF',color:'#1D4ED8'}}>{locationName}</span>
+            <span style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:700,background:USER_TYPE_COLORS[u.user_type]+'20',color:USER_TYPE_COLORS[u.user_type]}}>{USER_TYPE_LABELS[u.user_type]}</span>
+            <span style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:600,background:'var(--gray-100)',color:'var(--gray-600)'}}>{u.department}</span>
           </div>
         )}
       </div>
 
-      {loading && (
-        <div style={{ textAlign:'center', padding:60, color:'var(--gray-400)' }}>Loading preview...</div>
-      )}
+      {loading && <div style={{textAlign:'center',padding:60,color:'var(--gray-400)'}}>Loading preview...</div>}
 
-      {!loading && previewData && (
-        <div style={{ display:'flex', gap:20, alignItems:'flex-start' }}>
+      {!loading && previewData && u && (
+        <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
 
-          {/* Simulated Sidebar */}
-          <div style={{ width:220, flexShrink:0, background:sidebarBg, borderRadius:12, boxShadow:'0 4px 20px rgba(0,0,0,0.15)' }}>
-            {/* Logo area */}
-            <div style={{ padding:'14px 14px', borderBottom:`1px solid ${sidebarDivider}` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <div style={{ width:30, height:30, borderRadius:7, background:primary, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>🏢</div>
+          {/* Sidebar */}
+          <div style={{width:210,flexShrink:0,borderRadius:12,boxShadow:'0 4px 20px rgba(0,0,0,0.15)',background:sidebarBg,overflow:'hidden'}}>
+            <div style={{padding:'14px 14px 12px',borderBottom:'1px solid rgba(255,255,255,0.07)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:28,height:28,borderRadius:7,background:primary,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>🏢</div>
                 <div>
-                  <div><span style={{ fontWeight:700, fontSize:13, color:'#ffffff' }}>{previewData.theme?.company_name || 'ShiftManager'}</span></div>
-                  <div><span style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:1, display:'block' }}>{previewData.theme?.location_label || 'South Africa'}</span></div>
+                  <div><span style={{fontWeight:700,fontSize:13,color:'#ffffff'}}>{previewData.theme?.company_name||'ShiftManager'}</span></div>
+                  <div><span style={{fontSize:10,color:'rgba(255,255,255,0.35)'}}>{locationName}</span></div>
                 </div>
               </div>
             </div>
-
-            {/* Nav */}
-            <nav style={{ padding:'10px 8px' }}>
-              {[
-                { label:'Menu', items: menu },
-                { label:'Management', items: management },
-                { label:'Logs', items: logs },
-                { label:'Admin', items: admin },
-              ].filter(s => s.items.length > 0).map(section => (
-                <div key={section.label}>
-                  <div style={{ fontSize:9, fontWeight:700, letterSpacing:1.5, padding:'12px 8px 6px', textTransform:'uppercase' }}>
-                    <span style={{ color:'rgba(255,255,255,0.25)' }}>{section.label}</span>
-                  </div>
-                  {section.items.map(item => (
-                    <div key={item.id}
-                      onClick={() => setActivePage(item.id)}
-                      style={{
-                        display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, marginBottom:1,
-                        cursor:'pointer', fontSize:13, fontWeight:500, transition:'all 0.12s',
-                        color: activePage === item.id ? '#ffffff' : 'rgba(255,255,255,0.6)',
-                        background: activePage === item.id ? primary : 'transparent',
-                      }}
-                    >
-                      <span style={{ fontSize:13, flexShrink:0 }}>{item.icon}</span>
-                      <span style={{ color: activePage === item.id ? '#ffffff' : 'rgba(255,255,255,0.6)', fontWeight:500 }}>{item.label}</span>
+            <nav style={{padding:'8px 8px'}}>
+              {sections.map(section => {
+                const items = navModules.filter(m=>m.section===section);
+                if (!items.length) return null;
+                const sectionLabel = {menu:'Menu',management:'Management',logs:'Logs',admin:'Admin'}[section];
+                return (
+                  <div key={section}>
+                    <div style={{padding:'10px 8px 4px'}}>
+                      <span style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:'rgba(255,255,255,0.25)'}}>{sectionLabel}</span>
                     </div>
-                  ))}
-                </div>
-              ))}
-            </nav>
-
-            {/* User footer */}
-            <div style={{ padding:12, borderTop:`1px solid ${sidebarDivider}`, marginTop:'auto' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <div style={{ width:30, height:30, borderRadius:'50%', background:USER_TYPE_COLORS[u.user_type]||primary, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:13, color:'white', flexShrink:0 }}>
-                  {u.name?.trim()?.[0]?.toUpperCase()}
-                </div>
-                <div style={{ minWidth:0 }}>
-                  <div><span style={{ fontWeight:600, fontSize:12, color:'#ffffff' }}>{u.name}</span></div>
-                  <div style={{ fontSize:10, marginTop:1 }}>
-                    <span style={{ background:USER_TYPE_COLORS[u.user_type]+'30', color:USER_TYPE_COLORS[u.user_type], padding:'1px 6px', borderRadius:8, fontWeight:700 }}>
-                      {USER_TYPE_LABELS[u.user_type]||u.user_type}
-                    </span>
+                    {items.map(item=>(
+                      <div key={item.id} onClick={()=>setActivePage(item.id)}
+                        style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',borderRadius:7,marginBottom:1,cursor:'pointer',
+                          background:activePage===item.id?primary:'transparent'}}>
+                        <span style={{fontSize:14,flexShrink:0}}>{item.icon}</span>
+                        <span style={{fontSize:13,fontWeight:500,color:activePage===item.id?'#ffffff':'rgba(255,255,255,0.7)'}}>{item.label}</span>
+                      </div>
+                    ))}
                   </div>
+                );
+              })}
+            </nav>
+            <div style={{padding:'10px 12px',borderTop:'1px solid rgba(255,255,255,0.07)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:28,height:28,borderRadius:'50%',background:USER_TYPE_COLORS[u.user_type]||primary,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flexShrink:0}}>
+                  <span style={{color:'#ffffff'}}>{u.name?.trim()?.[0]?.toUpperCase()}</span>
+                </div>
+                <div style={{minWidth:0}}>
+                  <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    <span style={{fontWeight:600,fontSize:12,color:'#ffffff'}}>{u.name}</span>
+                  </div>
+                  <span style={{background:USER_TYPE_COLORS[u.user_type]+'30',color:USER_TYPE_COLORS[u.user_type],padding:'1px 6px',borderRadius:8,fontWeight:700,fontSize:10}}>
+                    {USER_TYPE_LABELS[u.user_type]}
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right panel: access summary */}
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:16 }}>
-
-            {/* Access summary */}
-            <div className="card" style={{ padding:20 }}>
-              <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>Access Summary for {u.name}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:10 }}>
-                {[
-                  { label:'Team Schedule', allowed: isLeader || isManager || isAdmin, note: !isAdmin ? `Defaults to ${u.department}` : 'All departments' },
-                  { label:'My Schedule', allowed: isAgent, note:'Own shifts only' },
-                  { label:'Manage Shifts', allowed: !!perms.manage_shifts, note:'Assign & remove shifts' },
-                  { label:'Leave Tracker', allowed: (isLeader || isManager || isAdmin) && !isPH, note: isPH ? 'Hidden — PH location' : '' },
-                  { label:'Hours Tracker', allowed: isLeader || isManager || isAdmin, note:'' },
-                  { label:'Clock Logs', allowed: !!perms.view_clock_logs, note:'' },
-                  { label:'Admin Panel', allowed: isAdmin || isManager || isLeader, note:'' },
-                  { label:'User Management', allowed: isManager || isLeader || isAdmin, note:'' },
-                  { label:'Payroll Export', allowed: !isPH && (isLeader || isManager || isAdmin), note: isPH ? 'Hidden — PH location' : '' },
-                  { label:'Preview as User', allowed: isAdmin, note:'Admin only' },
-                ].map(item => (
-                  <div key={item.label} style={{
-                    display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px',
-                    borderRadius:8, border:'1px solid var(--gray-100)',
-                    background: item.allowed ? '#f0fdf4' : '#fef2f2'
-                  }}>
-                    <span style={{ fontSize:16, flexShrink:0 }}>{item.allowed ? '✅' : '❌'}</span>
-                    <div>
-                      <div style={{ fontWeight:600, fontSize:13 }}>{item.label}</div>
-                      {item.note && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{item.note}</div>}
-                    </div>
-                  </div>
-                ))}
+          {/* Right panel */}
+          <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:12}}>
+            {isPH && (
+              <div style={{background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:8,padding:'8px 14px',fontSize:13,color:'#92400e'}}>
+                🇵🇭 <strong>Philippines user</strong> — Leave Tracker and Payroll Export are hidden. Hours tracked only.
               </div>
+            )}
+            <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'8px 14px',fontSize:13,color:'#1e40af'}}>
+              📁 Views default to <strong>{u.department}</strong>
+              {['manager','account_admin'].includes(u.user_type) ? ' — can switch to any department' : u.user_type==='team_leader' ? ' — can switch departments' : ' — cannot browse other departments'}
             </div>
 
-            {/* PH notice */}
-            {isPH && (
-              <div style={{ background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:10, padding:'12px 16px', fontSize:13, color:'#92400e' }}>
-                🇵🇭 <strong>Philippines location:</strong> This user's hours are tracked but they are excluded from payroll exports and cannot see the Leave Tracker.
-                Their shifts display in PHT (UTC+8).
+            {/* Page preview */}
+            <div className="card" style={{padding:24,minHeight:260}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20,paddingBottom:16,borderBottom:'1px solid var(--gray-100)'}}>
+                <span style={{fontSize:20}}>{activeModule?.icon||'📄'}</span>
+                <h2 style={{margin:0,fontSize:18}}>{pageContent?.title||activePage}</h2>
+                {!navModules.find(m=>m.id===activePage) && (
+                  <span style={{marginLeft:'auto',padding:'3px 10px',borderRadius:20,background:'#fef2f2',color:'#dc2626',fontSize:12,fontWeight:600}}>❌ No access</span>
+                )}
               </div>
-            )}
+              {pageContent ? pageContent.render(u) : (
+                <div style={{textAlign:'center',padding:40,color:'var(--gray-400)'}}>Select a page from the sidebar</div>
+              )}
+            </div>
 
-            {/* Department default notice */}
-            {!isAdmin && (
-              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 16px', fontSize:13, color:'#1e40af' }}>
-                📁 <strong>Department default:</strong> When this user logs in, Team Schedule and other views will automatically filter to <strong>{u.department}</strong>.
-                {isLeader || isManager ? ' They can manually switch to other departments.' : ' They cannot browse other departments.'}
+            {/* Access grid */}
+            <div>
+              <div style={{fontWeight:600,fontSize:13,color:'var(--gray-500)',marginBottom:8}}>All pages — click to preview</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(165px,1fr))',gap:8}}>
+                {ALL_MODULES.map(mod=>{
+                  const allowed = canSee(mod, u.user_type, perms, isPH);
+                  return (
+                    <div key={mod.id} onClick={()=>allowed&&setActivePage(mod.id)}
+                      style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:8,
+                        border:`1px solid ${activePage===mod.id?primary:allowed?'#d1fae5':'var(--gray-100)'}`,
+                        background:activePage===mod.id?primary+'18':allowed?'#f0fdf4':'#fafafa',
+                        cursor:allowed?'pointer':'default',opacity:allowed?1:0.5}}>
+                      <span style={{fontSize:14}}>{mod.icon}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:allowed?'var(--gray-700)':'var(--gray-400)',flex:1}}>{mod.label}</span>
+                      <span style={{fontSize:11}}>{allowed?'✅':'❌'}</span>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-
-            {/* Active page indicator */}
-            <div className="card" style={{ padding:16, textAlign:'center', color:'var(--gray-400)', fontSize:13 }}>
-              <span style={{ fontSize:20, display:'block', marginBottom:6 }}>
-                {allNavItems.find(i => i.id === activePage)?.icon || '📄'}
-              </span>
-              Click any item in the sidebar to see what this user can access.
-              Currently selected: <strong style={{ color:'var(--gray-600)' }}>{allNavItems.find(i => i.id === activePage)?.label || activePage}</strong>
-              {!allNavItems.find(i => i.id === activePage) && activePage !== 'dashboard' &&
-                <div style={{ marginTop:8, color:'var(--red)', fontWeight:600 }}>⚠️ This page is not in this user's navigation</div>
-              }
             </div>
           </div>
         </div>

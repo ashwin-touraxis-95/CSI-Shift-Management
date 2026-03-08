@@ -103,7 +103,9 @@ export default function Team() {
 
   const handleSave = async (user) => {
     try {
-      await axios.put(`/api/users/${user.id}`, { user_type:user.user_type, department:user.department, name:user.name, timezone:user.timezone||'Africa/Johannesburg', location:user.location||'SA' });
+      const loc = user.location && user.location !== 'null' ? user.location : 'SA';
+      const tz = user.timezone || 'Africa/Johannesburg';
+      await axios.put(`/api/users/${user.id}`, { user_type:user.user_type, department:user.department, name:user.name, timezone:tz, location:loc });
       setEditing(null); fetchUsers(); msg('User updated!');
     } catch(e) { msg(e.response?.data?.error||'Error','error'); }
   };

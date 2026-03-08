@@ -626,8 +626,10 @@ app.put('/api/users/:id', requireAuth, canManageUsers, async (req, res) => {
     return res.status(403).json({ error:'Team Leaders can only assign Agent or Team Leader user types' });
   const finalActive = active!==undefined ? active : target.active;
   const { timezone, location } = req.body;
+  const finalTimezone = timezone || target.timezone || 'Africa/Johannesburg';
+  const finalLocation = (location !== undefined && location !== null && location !== '') ? location : (target.location || 'SA');
   await run('UPDATE users SET user_type=$1,department=$2,name=$3,active=$4,timezone=$5,location=$6 WHERE id=$7',
-    [user_type!==undefined?user_type:target.user_type, department||target.department, name||target.name, finalActive, timezone||target.timezone||'Africa/Johannesburg', location||target.location||'SA', req.params.id]);
+    [user_type!==undefined?user_type:target.user_type, department||target.department, name||target.name, finalActive, finalTimezone, finalLocation, req.params.id]);
   if (active!==undefined&&active!==target.active) {
     await auditLog(active?'user_activated':'user_deactivated',u.id,target);
     if (!active) { await run("UPDATE availability SET status='offline' WHERE user_id=$1",[req.params.id]); io.emit('availability_update'); }
