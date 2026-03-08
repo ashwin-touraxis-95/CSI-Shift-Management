@@ -603,7 +603,7 @@ app.put('/api/users/:id', requireAuth, canManageUsers, async (req, res) => {
   if (u.user_type==='team_leader'&&user_type&&!['agent','team_leader'].includes(user_type))
     return res.status(403).json({ error:'Team Leaders can only assign Agent or Team Leader user types' });
   const finalActive = active!==undefined ? active : target.active;
-  const { user_type, department, name, active, timezone, location } = req.body;  
+  const { timezone, location } = req.body;
   await run('UPDATE users SET user_type=$1,department=$2,name=$3,active=$4,timezone=$5,location=$6 WHERE id=$7',
     [user_type!==undefined?user_type:target.user_type, department||target.department, name||target.name, finalActive, timezone||target.timezone||'Africa/Johannesburg', location||target.location||'SA', req.params.id]);
   if (active!==undefined&&active!==target.active) {
