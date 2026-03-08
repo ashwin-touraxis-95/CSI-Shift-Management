@@ -96,7 +96,8 @@ export default function AdminPanel() {
   const [holidayLoading, setHolidayLoading] = useState(false);
   const [visibility, setVisibility] = useState({});
   const [locations, setLocations] = useState([]);
-  const [newLocation, setNewLocation] = useState({ code:'', name:'', timezone:'Africa/Johannesburg' }); // { deptName: { leave:bool, payroll:bool, manage_shifts:bool } }
+  const [newLocation, setNewLocation] = useState({ code:'', name:'', timezone:'Africa/Johannesburg' });
+  const [locationMsg, setLocationMsg] = useState({ text:'', type:'' });
 
   const BREAK_EMOJIS = [
     '🍽️','☕','🚻','📋','📚','🙏','💤','🏃','🎮','📱',
@@ -1112,16 +1113,21 @@ export default function AdminPanel() {
           { value:'UTC',                 label:'UTC' },
         ];
         const handleAddLocation = async () => {
-          if (!newLocation.code || !newLocation.name) return setSaved('Code and name are required');
+          if (!newLocation.code || !newLocation.name) return setLocationMsg({ text:'Code and name are required', type:'error' });
           try {
             await axios.post('/api/locations', newLocation);
             setNewLocation({ code:'', name:'', timezone:'Africa/Johannesburg' });
-            fetchAll(); setSaved('Location added!'); setTimeout(() => setSaved(''), 2500);
-          } catch(e) { setSaved(e.response?.data?.error || 'Error'); setTimeout(() => setSaved(''), 2500); }
+            fetchAll();
+            setLocationMsg({ text:'Location added!', type:'success' });
+            setTimeout(() => setLocationMsg({ text:'', type:'' }), 2500);
+          } catch(e) {
+            setLocationMsg({ text: e.response?.data?.error || 'Error adding location', type:'error' });
+            setTimeout(() => setLocationMsg({ text:'', type:'' }), 3000);
+          }
         };
         const handleDeleteLocation = async (id) => {
           if (!window.confirm('Remove this location? Users assigned to it will keep their current location code.')) return;
-          try { await axios.delete(`/api/locations/${id}`); fetchAll(); } catch(e) {}
+          try { await axios.delete(`/api/locations/${id}`); fetchAll(); setLocationMsg({ text:'Location removed', type:'success' }); setTimeout(() => setLocationMsg({ text:'', type:'' }), 2000); } catch(e) {}
         };
         return (
           <div className="fade-in">
@@ -1129,7 +1135,7 @@ export default function AdminPanel() {
               Manage locations used across the app. Each location has a short code, a display name, and a timezone.
               When a user is assigned a location, their timezone is set automatically.
             </p>
-            {saved && <div style={{ background:'#d4edda', border:'1px solid #c3e6cb', borderRadius:8, padding:'10px 16px', marginBottom:16, color:'#155724', fontSize:14 }}>{saved}</div>}
+            {locationMsg.text && (<div style={{ background: locationMsg.type==='error'?'#fef2f2':'#d4edda', border:`1px solid ${locationMsg.type==='error'?'#fca5a5':'#c3e6cb'}`, borderRadius:8, padding:'10px 16px', marginBottom:16, color: locationMsg.type==='error'?'#dc2626':'#155724', fontSize:14 }}>{locationMsg.type==='error'?'❌ ':'✅ '}{locationMsg.text}</div>)}
             <div className="card" style={{ padding:20, marginBottom:20 }}>
               <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>Current Locations</div>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:14 }}>
@@ -1169,8 +1175,8 @@ export default function AdminPanel() {
               <div style={{ display:'grid', gridTemplateColumns:'120px 1fr 1fr auto', gap:12, alignItems:'flex-end' }}>
                 <div>
                   <label style={{ fontSize:12, fontWeight:600, color:'var(--gray-500)', display:'block', marginBottom:4 }}>Code *</label>
-                  <input placeholder="e.g. UK" value={newLocation.code} onChange={e => setNewLocation(p => ({ ...p, code: e.target.value.toUpperCase().slice(0,5) }))}
-                    style={{ textTransform:'uppercase', fontFamily:'DM Mono', fontWeight:700 }}/>
+                  <input placeholder="SA, PH, UK…" value={newLocation.code} onChange={e => setNewLocation(p => ({ ...p, code: e.target.value.toUpperCase().slice(0,5) }))}
+                    style={{ textTransform:'uppercase', fontFamily:'DM Mono', fontWeight:700, borderColor: !newLocation.code ? '#fca5a5' : undefined }}/>
                 </div>
                 <div>
                   <label style={{ fontSize:12, fontWeight:600, color:'var(--gray-500)', display:'block', marginBottom:4 }}>Name *</label>
