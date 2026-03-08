@@ -11,6 +11,7 @@ export default function Team() {
   const [message, setMessage] = useState({ text:'', type:'success' });
   const [showInactive, setShowInactive] = useState(false);
   const [depts, setDepts] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [jobRoles, setJobRoles] = useState([]);
   const [agentRoles, setAgentRoles] = useState({}); // { userId: [roleId, ...] }
   const [tempPasswordModal, setTempPasswordModal] = useState(null); // { name, tempPassword }
@@ -29,7 +30,12 @@ export default function Team() {
     ];
   };
 
-  useEffect(() => { fetchUsers(); fetchDepts(); fetchJobRoles(); }, []);
+  useEffect(() => { fetchUsers(); fetchDepts(); fetchLocations(); fetchJobRoles(); }, []);
+
+  const fetchLocations = async () => {
+    try { const r = await axios.get('/api/locations'); setLocations(Array.isArray(r.data) ? r.data : []); }
+    catch { setLocations([{ code:'SA', name:'South Africa', timezone:'Africa/Johannesburg' }, { code:'PH', name:'Philippines', timezone:'Asia/Manila' }]); }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -199,25 +205,15 @@ export default function Team() {
                   {depts.map(d=><option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-              <div><label>Timezone</label>
-                <select value={newUser.timezone||'Africa/Johannesburg'} onChange={e=>setNewUser(u=>({...u,timezone:e.target.value}))}>
-                  <option value="Africa/Johannesburg">South Africa (SAST, UTC+2)</option>
-                  <option value="Asia/Manila">Philippines (PHT, UTC+8)</option>
-                  <option value="Europe/London">United Kingdom (GMT/BST)</option>
-                  <option value="America/New_York">US Eastern (EST/EDT)</option>
-                  <option value="America/Chicago">US Central (CST/CDT)</option>
-                  <option value="America/Los_Angeles">US Pacific (PST/PDT)</option>
-                  <option value="Europe/Paris">Central Europe (CET/CEST)</option>
-                  <option value="Asia/Dubai">Dubai (GST, UTC+4)</option>
-                  <option value="Asia/Kolkata">India (IST, UTC+5:30)</option>
-                  <option value="Australia/Sydney">Australia Eastern (AEST)</option>
-                  <option value="UTC">UTC</option>
-                </select>
-              </div>
               <div><label>Location</label>
-                <select value={newUser.location||'SA'} onChange={e=>setNewUser(u=>({...u,location:e.target.value}))}>
-                  <option value="SA">🇿🇦 South Africa (SA) — Full payroll</option>
-                  <option value="PH">🇵🇭 Philippines (PH) — Hours tracking only</option>
+                <select value={newUser.location||'SA'} onChange={e => {
+                  const loc = locations.find(l => l.code === e.target.value);
+                  setNewUser(u => ({ ...u, location: e.target.value, timezone: loc?.timezone || u.timezone }));
+                }}>
+                  {locations.length > 0
+                    ? locations.map(l => <option key={l.code} value={l.code}>{l.name} ({l.code})</option>)
+                    : <><option value="SA">South Africa (SA)</option><option value="PH">Philippines (PH)</option></>
+                  }
                 </select>
               </div>
               {newUser.user_type === 'agent' && (
@@ -284,12 +280,17 @@ export default function Team() {
                   </td>
                   <td style={{ padding:'12px 16px' }}>
                     {isEditing
-                      ? <select value={cur.location||'SA'} onChange={e=>setEditing(p=>({...p,location:e.target.value}))} style={{ maxWidth:120 }}>
-                          <option value="SA">🇿🇦 SA</option>
-                          <option value="PH">🇵🇭 PH</option>
+                      ? <select value={cur.location||'SA'} onChange={e => {
+                          const loc = locations.find(l => l.code === e.target.value);
+                          setEditing(p => ({ ...p, location: e.target.value, timezone: loc?.timezone || p.timezone }));
+                        }} style={{ maxWidth:140 }}>
+                          {locations.length > 0
+                            ? locations.map(l => <option key={l.code} value={l.code}>{l.name} ({l.code})</option>)
+                            : <><option value="SA">South Africa (SA)</option><option value="PH">Philippines (PH)</option></>
+                          }
                         </select>
                       : <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background: user.location==='PH'?'#FEF3C7':'#EFF6FF', color: user.location==='PH'?'#92400E':'#1D4ED8' }}>
-                          {user.location==='PH' ? '🇵🇭 PH' : '🇿🇦 SA'}
+                          {user.location || 'SA'}
                         </span>
                     }
                   </td>

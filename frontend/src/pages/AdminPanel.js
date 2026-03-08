@@ -94,7 +94,9 @@ export default function AdminPanel() {
   const [newHoliday, setNewHoliday] = useState({ date:'', name:'' });
   const [holidayYear, setHolidayYear] = useState(new Date().getFullYear());
   const [holidayLoading, setHolidayLoading] = useState(false);
-  const [visibility, setVisibility] = useState({}); // { deptName: { leave:bool, payroll:bool, manage_shifts:bool } }
+  const [visibility, setVisibility] = useState({});
+  const [locations, setLocations] = useState([]);
+  const [newLocation, setNewLocation] = useState({ code:'', name:'', timezone:'Africa/Johannesburg' }); // { deptName: { leave:bool, payroll:bool, manage_shifts:bool } }
 
   const BREAK_EMOJIS = [
     '🍽️','☕','🚻','📋','📚','🙏','💤','🏃','🎮','📱',
@@ -113,13 +115,14 @@ export default function AdminPanel() {
 
   const fetchAll = async () => {
     try {
-      const [pr, th, dr, ur, jr, br] = await Promise.all([
+      const [pr, th, dr, ur, jr, br, lr] = await Promise.all([
         axios.get('/api/permissions').catch(() => ({ data: {} })),
         axios.get('/api/theme').catch(() => ({ data: {} })),
         axios.get('/api/departments').catch(() => ({ data: [] })),
         axios.get('/api/users').catch(() => ({ data: [] })),
         axios.get('/api/job-roles').catch(() => ({ data: [] })),
         axios.get('/api/break-types?all=true').catch(() => ({ data: [] })),
+        axios.get('/api/locations').catch(() => ({ data: [] })),
       ]);
       setPermissions(pr.data);
       setTheme(th.data);
@@ -132,6 +135,7 @@ export default function AdminPanel() {
       setJobRoles(Array.isArray(jr.data) ? jr.data : []);
       console.log('break-types raw response:', br.data, 'isArray:', Array.isArray(br.data), 'length:', br.data?.length);
       setBreakTypes(Array.isArray(br.data) ? br.data : []);
+      setLocations(Array.isArray(lr.data) ? lr.data : []);
     } catch(e) {
       console.error('AdminPanel fetchAll error:', e);
     }
@@ -260,6 +264,7 @@ export default function AdminPanel() {
     { id:'display',     label:'📺 Display Screen',     show: isAccountAdmin },
     { id:'structure',   label:'🏢 Org Structure',      show: isAccountAdmin || isManager },
     { id:'visibility',  label:'👁 Module Visibility',  show: isAccountAdmin },
+    { id:'locations',   label:'📍 Locations',           show: isAccountAdmin },
     { id:'breaks',      label:'☕ Break Types',         show: isAccountAdmin || isManager },
     { id:'hours',       label:'📊 Hours Targets',       show: isAccountAdmin || isManager },
     { id:'holidays',    label:'🗓 Public Holidays',     show: canManageHolidays },
@@ -1050,6 +1055,99 @@ export default function AdminPanel() {
             <div style={{ marginTop:20, padding:14, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, fontSize:13, color:'#1e40af' }}>
               💡 <strong>PH agents</strong> — Payroll Export and Leave Tracker are always hidden for agents with location set to PH, regardless of department settings.
               Change an agent's location in <strong>User Management → Edit user</strong>.
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── LOCATIONS ── */}
+      {tab === 'locations' && (() => {
+        const TIMEZONES = [
+          { value:'Africa/Johannesburg', label:'Africa/Johannesburg (SAST, UTC+2)' },
+          { value:'Asia/Manila',         label:'Asia/Manila (PHT, UTC+8)' },
+          { value:'Europe/London',       label:'Europe/London (GMT/BST)' },
+          { value:'America/New_York',    label:'America/New_York (EST/EDT)' },
+          { value:'America/Chicago',     label:'America/Chicago (CST/CDT)' },
+          { value:'America/Los_Angeles', label:'America/Los_Angeles (PST/PDT)' },
+          { value:'Europe/Paris',        label:'Europe/Paris (CET/CEST)' },
+          { value:'Asia/Dubai',          label:'Asia/Dubai (GST, UTC+4)' },
+          { value:'Asia/Kolkata',        label:'Asia/Kolkata (IST, UTC+5:30)' },
+          { value:'Australia/Sydney',    label:'Australia/Sydney (AEST)' },
+          { value:'UTC',                 label:'UTC' },
+        ];
+        const handleAddLocation = async () => {
+          if (!newLocation.code || !newLocation.name) return setSaved('Code and name are required');
+          try {
+            await axios.post('/api/locations', newLocation);
+            setNewLocation({ code:'', name:'', timezone:'Africa/Johannesburg' });
+            fetchAll(); setSaved('Location added!'); setTimeout(() => setSaved(''), 2500);
+          } catch(e) { setSaved(e.response?.data?.error || 'Error'); setTimeout(() => setSaved(''), 2500); }
+        };
+        const handleDeleteLocation = async (id) => {
+          if (!window.confirm('Remove this location? Users assigned to it will keep their current location code.')) return;
+          try { await axios.delete(`/api/locations/${id}`); fetchAll(); } catch(e) {}
+        };
+        return (
+          <div className="fade-in">
+            <p style={{ color:'var(--gray-500)', fontSize:14, marginBottom:20 }}>
+              Manage locations used across the app. Each location has a short code, a display name, and a timezone.
+              When a user is assigned a location, their timezone is set automatically.
+            </p>
+            {saved && <div style={{ background:'#d4edda', border:'1px solid #c3e6cb', borderRadius:8, padding:'10px 16px', marginBottom:16, color:'#155724', fontSize:14 }}>{saved}</div>}
+            <div className="card" style={{ padding:20, marginBottom:20 }}>
+              <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>Current Locations</div>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:14 }}>
+                <thead>
+                  <tr style={{ background:'var(--gray-50)', borderBottom:'2px solid var(--gray-200)' }}>
+                    {['Code','Name','Timezone','Users',''].map(h => (
+                      <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, fontSize:12, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:0.5 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {locations.length === 0 && <tr><td colSpan={5} style={{ padding:30, textAlign:'center', color:'var(--gray-400)' }}>No locations yet</td></tr>}
+                  {locations.map(loc => {
+                    const userCount = allUsers.filter(u => (u.location || 'SA') === loc.code).length;
+                    return (
+                      <tr key={loc.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
+                        <td style={{ padding:'10px 14px' }}>
+                          <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background:'#EFF6FF', color:'#1D4ED8' }}>{loc.code}</span>
+                        </td>
+                        <td style={{ padding:'10px 14px', fontWeight:600 }}>{loc.name}</td>
+                        <td style={{ padding:'10px 14px', color:'var(--gray-500)', fontSize:13, fontFamily:'DM Mono' }}>{loc.timezone}</td>
+                        <td style={{ padding:'10px 14px', color:'var(--gray-500)', fontSize:13 }}>{userCount} user{userCount !== 1 ? 's' : ''}</td>
+                        <td style={{ padding:'10px 14px' }}>
+                          <button onClick={() => handleDeleteLocation(loc.id)}
+                            style={{ padding:'4px 12px', borderRadius:6, border:'1px solid #fca5a5', background:'#fef2f2', color:'#dc2626', fontSize:12, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="card" style={{ padding:20 }}>
+              <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>Add New Location</div>
+              <div style={{ display:'grid', gridTemplateColumns:'120px 1fr 1fr auto', gap:12, alignItems:'flex-end' }}>
+                <div>
+                  <label style={{ fontSize:12, fontWeight:600, color:'var(--gray-500)', display:'block', marginBottom:4 }}>Code *</label>
+                  <input placeholder="e.g. UK" value={newLocation.code} onChange={e => setNewLocation(p => ({ ...p, code: e.target.value.toUpperCase().slice(0,5) }))}
+                    style={{ textTransform:'uppercase', fontFamily:'DM Mono', fontWeight:700 }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:12, fontWeight:600, color:'var(--gray-500)', display:'block', marginBottom:4 }}>Name *</label>
+                  <input placeholder="e.g. United Kingdom" value={newLocation.name} onChange={e => setNewLocation(p => ({ ...p, name: e.target.value }))}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:12, fontWeight:600, color:'var(--gray-500)', display:'block', marginBottom:4 }}>Timezone *</label>
+                  <select value={newLocation.timezone} onChange={e => setNewLocation(p => ({ ...p, timezone: e.target.value }))}>
+                    {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                  </select>
+                </div>
+                <button className="btn btn-primary" onClick={handleAddLocation}>Add</button>
+              </div>
             </div>
           </div>
         );

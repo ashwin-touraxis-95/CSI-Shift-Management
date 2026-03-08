@@ -557,18 +557,40 @@ app.get('/api/preview-user/:id', requireAdmin, async (req, res) => {
   });
 });
 
+// ── LOCATIONS ──────────────────────────────────────────────────────────────
+app.get('/api/locations', requireAuth, async (req, res) => {
+  res.json(await all('SELECT * FROM locations WHERE active=1 ORDER BY name'));
+});
+app.post('/api/locations', requireAdmin, async (req, res) => {
+  const { code, name, timezone } = req.body;
+  if (!code || !name || !timezone) return res.status(400).json({ error: 'code, name and timezone are required' });
+  if (await get('SELECT id FROM locations WHERE code=$1', [code.toUpperCase()])) return res.status(400).json({ error: 'Location code already exists' });
+  const id = uuidv4();
+  await run('INSERT INTO locations(id,code,name,timezone) VALUES($1,$2,$3,$4)', [id, code.toUpperCase(), name, timezone]);
+  res.json({ ok: true, id });
+});
+app.put('/api/locations/:id', requireAdmin, async (req, res) => {
+  const { name, timezone } = req.body;
+  await run('UPDATE locations SET name=$1,timezone=$2 WHERE id=$3', [name, timezone, req.params.id]);
+  res.json({ ok: true });
+});
+app.delete('/api/locations/:id', requireAdmin, async (req, res) => {
+  await run('UPDATE locations SET active=0 WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
 // ── USERS ─────────────────────────────────────────────────────────────────────
 app.get('/api/users', requireAuth, async (req, res) => {
   const u = req.user;
   // Agents can only see active colleagues in their own department (for team schedule)
   if (u.user_type === 'agent') {
-    return res.json(await all("SELECT id,name,avatar,user_type,department FROM users WHERE department=$1 AND active=1 ORDER BY name", [u.department]));
+    return res.json(await all("SELECT id,name,avatar,user_type,department,location,timezone FROM users WHERE department=$1 AND active=1 ORDER BY name", [u.department]));
   }
   if (!['account_admin','manager','team_leader'].includes(u.user_type))
     return res.status(403).json({ error: 'Permission denied' });
   if (['account_admin','manager'].includes(u.user_type))
-    return res.json(await all("SELECT id,email,name,avatar,user_type,department,active,onboarded,force_password_change FROM users WHERE user_type!='account_admin' ORDER BY user_type,name"));
-  res.json(await all("SELECT id,email,name,avatar,user_type,department,active,onboarded FROM users WHERE user_type IN ('agent','team_leader') AND active=1 ORDER BY name"));
+    return res.json(await all("SELECT id,email,name,avatar,user_type,department,location,timezone,active,onboarded,force_password_change FROM users WHERE user_type!='account_admin' ORDER BY user_type,name"));
+  res.json(await all("SELECT id,email,name,avatar,user_type,department,location,timezone,active,onboarded FROM users WHERE user_type IN ('agent','team_leader') AND active=1 ORDER BY name"));
 });
 app.post('/api/users', requireAuth, canManageUsers, async (req, res) => {
   const u = req.user;

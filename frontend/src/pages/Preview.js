@@ -8,6 +8,7 @@ export default function Preview() {
   const sidebarBg = theme?.sidebar_bg || '#111827';
 
   const [allUsers, setAllUsers] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -19,6 +20,7 @@ export default function Preview() {
       setAllUsers(users);
       if (users.length > 0) setSelectedId(users[0].id);
     }).catch(() => {});
+    axios.get('/api/locations').then(r => setLocations(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export default function Preview() {
         {u && (
           <div style={{ display:'flex', alignItems:'center', gap:8, marginLeft:'auto' }}>
             <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background: isPH?'#FEF3C7':'#EFF6FF', color: isPH?'#92400E':'#1D4ED8' }}>
-              {isPH ? '🇵🇭 PH' : '🇿🇦 SA'}
+              {locations.find(l => l.code === u?.location)?.name || u?.location || 'SA'}
             </span>
             <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background: USER_TYPE_COLORS[u.user_type]+'20', color: USER_TYPE_COLORS[u.user_type] }}>
               {USER_TYPE_LABELS[u.user_type] || u.user_type}
@@ -119,7 +121,7 @@ export default function Preview() {
         <div style={{ display:'flex', gap:20, alignItems:'flex-start' }}>
 
           {/* Simulated Sidebar */}
-          <div style={{ width:200, flexShrink:0, background:sidebarBg, borderRadius:12, overflow:'hidden', boxShadow:'0 4px 20px rgba(0,0,0,0.15)' }}>
+          <div style={{ width:220, flexShrink:0, background:sidebarBg, borderRadius:12, boxShadow:'0 4px 20px rgba(0,0,0,0.15)' }}>
             {/* Logo area */}
             <div style={{ padding:'14px 14px', borderBottom:`1px solid ${sidebarDivider}` }}>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
