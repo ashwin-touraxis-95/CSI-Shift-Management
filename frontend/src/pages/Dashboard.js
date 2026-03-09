@@ -6,8 +6,7 @@ import io from 'socket.io-client';
 const socket = io(process.env.NODE_ENV === 'production' ? 'https://csi-shift-app.up.railway.app' : 'http://localhost:5000');
 
 export default function Dashboard() {
-  const { user, can, theme, isAdmin, isManager, isLeader } = useAuth();
-  const isAgent = user?.user_type === 'agent';
+  const { user, can, theme } = useAuth();
   const [availability, setAvailability] = useState([]);
   const [clockStatus, setClockStatus] = useState({ clockedIn: false });
   const [breakStatus, setBreakStatus] = useState({ onBreak: false, currentBreak: null, todayBreaks: [] });

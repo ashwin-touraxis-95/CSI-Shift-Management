@@ -153,24 +153,31 @@ export default function Team() {
   );
   const roleColor = { manager:'#2980B9', team_leader:'#8E44AD', agent:'#27AE60' };
 
-  const DeactivateModal = () => (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000 }}>
-      <div className="card fade-in" style={{ width:400,padding:32 }}>
-        <h2 style={{ marginBottom:8 }}>Deactivate User</h2>
-        <p style={{ color:'var(--gray-500)',fontSize:14,marginBottom:20 }}>
-          Deactivating <strong>{deactivateModal?.name}</strong> will prevent them from logging in. Set an end date for hours tracking.
-        </p>
-        <div style={{ marginBottom:20 }}>
-          <label>End Date <span style={{ color:'var(--gray-400)',fontSize:12,fontWeight:400 }}>(last day to track hours)</span></label>
-          <input type="date" value={deactivateEndDate} onChange={e=>setDeactivateEndDate(e.target.value)} style={{ width:'100%' }}/>
-        </div>
-        <div style={{ display:'flex',gap:8 }}>
-          <button className="btn btn-danger" onClick={async()=>{ await handleSetActive(deactivateModal.id,false,deactivateEndDate); setDeactivateModal(null); setDeactivateEndDate(''); }}>Deactivate</button>
-          <button className="btn btn-secondary" onClick={()=>{ setDeactivateModal(null); setDeactivateEndDate(''); }}>Cancel</button>
+  const DeactivateModal = () => {
+    const doDeactivate = async () => {
+      await handleSetActive(deactivateModal.id, false, deactivateEndDate);
+      setDeactivateModal(null);
+      setDeactivateEndDate('');
+    };
+    return (
+      <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000 }}>
+        <div className="card fade-in" style={{ width:400,padding:32 }}>
+          <h2 style={{ marginBottom:8 }}>Deactivate User</h2>
+          <p style={{ color:'var(--gray-500)',fontSize:14,marginBottom:20 }}>
+            Deactivating <strong>{deactivateModal?.name}</strong> will prevent them from logging in. Set an end date for hours tracking.
+          </p>
+          <div style={{ marginBottom:20 }}>
+            <label>End Date <span style={{ color:'var(--gray-400)',fontSize:12,fontWeight:400 }}>(last day to track hours)</span></label>
+            <input type="date" value={deactivateEndDate} onChange={e=>setDeactivateEndDate(e.target.value)} style={{ width:'100%' }}/>
+          </div>
+          <div style={{ display:'flex',gap:8 }}>
+            <button className="btn btn-danger" onClick={doDeactivate}>Deactivate</button>
+            <button className="btn btn-secondary" onClick={()=>{ setDeactivateModal(null); setDeactivateEndDate(''); }}>Cancel</button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div>
