@@ -420,7 +420,6 @@ export default function Team() {
           </tbody>
         </table>
       </div>
-    </div>
     {deactivateModal && <DeactivateModal/>}
     </>
   );
