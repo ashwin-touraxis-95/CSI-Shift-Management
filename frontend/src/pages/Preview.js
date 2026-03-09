@@ -125,32 +125,40 @@ function PagePreview({ pageId, user, liveUsers = [], liveShifts = [] }) {
       </div>
     );
 
-    case 'manage-shifts': return (
-      <div>
-        <div style={{ display:'flex', gap:10, marginBottom:16 }}>
-          <button style={{ padding:'7px 16px', borderRadius:8, border:'none', background:'#C0392B', color:'white', fontFamily:'inherit', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ New Shift</button>
-          <button style={{ padding:'7px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'white', fontFamily:'inherit', fontSize:13, cursor:'pointer' }}>Publish Draft</button>
+    case 'manage-shifts': {
+      const manageShiftRows = liveShifts.slice(0,8);
+      return (
+        <div>
+          <div style={{ display:'flex', gap:10, marginBottom:16 }}>
+            <button style={{ padding:'7px 16px', borderRadius:8, border:'none', background:'#C0392B', color:'white', fontFamily:'inherit', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ New Shift</button>
+            <button style={{ padding:'7px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'white', fontFamily:'inherit', fontSize:13, cursor:'pointer' }}>Publish Draft</button>
+          </div>
+          {card(
+            manageShiftRows.length === 0
+              ? <div style={{ padding:32, textAlign:'center', color:'#9ca3af', fontSize:13 }}>No shifts in current period</div>
+              : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:14 }}>
+                  <thead><tr style={{ borderBottom:'2px solid #f3f4f6' }}>
+                    {['Agent','Date','Time','Status','Actions'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:12, color:'#9ca3af', fontWeight:600, textTransform:'uppercase' }}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {manageShiftRows.map(s=>{
+                      const agent = liveUsers.find(u=>String(u.id)===String(s.user_id));
+                      return (
+                        <tr key={s.id} style={{ borderBottom:'1px solid #f3f4f6' }}>
+                          <td style={{ padding:'10px 12px', fontWeight:600 }}>{agent?.name||'Agent'}</td>
+                          <td style={{ padding:'10px 12px', color:'#6b7280' }}>{s.date}</td>
+                          <td style={{ padding:'10px 12px', fontFamily:'DM Mono', fontSize:12 }}>{s.start_time?.slice(0,5)}–{s.end_time?.slice(0,5)}</td>
+                          <td style={{ padding:'10px 12px' }}><span style={{ padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background: s.status==='published'?'#d1fae5':'#fef3c7', color: s.status==='published'?'#065f46':'#92400e' }}>{s.status}</span></td>
+                          <td style={{ padding:'10px 12px' }}><button style={{ padding:'3px 10px', borderRadius:6, border:'1px solid #e5e7eb', background:'white', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Edit</button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+          )}
         </div>
-        {card(
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:14 }}>
-            <thead><tr style={{ borderBottom:'2px solid #f3f4f6' }}>
-              {['Agent','Date','Time','Status','Actions'].map(h=><th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:12, color:'#9ca3af', fontWeight:600, textTransform:'uppercase' }}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {fakeShifts.map(s=>(
-                <tr key={s.name} style={{ borderBottom:'1px solid #f3f4f6' }}>
-                  <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.name}</td>
-                  <td style={{ padding:'10px 12px', color:'#6b7280' }}>Mon 10 Mar</td>
-                  <td style={{ padding:'10px 12px' }}>{s.time}</td>
-                  <td style={{ padding:'10px 12px' }}><span style={{ padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background: s.status==='published'?'#d1fae5':'#fef3c7', color: s.status==='published'?'#065f46':'#92400e' }}>{s.status}</span></td>
-                  <td style={{ padding:'10px 12px' }}><button style={{ padding:'3px 10px', borderRadius:6, border:'1px solid #e5e7eb', background:'white', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Edit</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
+      );
+    }
 
     case 'leave': return (
       <div>
@@ -306,6 +314,22 @@ export default function Preview() {
   const { theme } = useAuth();
   const primary = theme?.primary_color || '#C0392B';
   const sidebarBg = theme?.sidebar_bg || '#111827';
+  // Detect if sidebar is light-coloured to choose readable text
+  const isSidebarLight = (() => {
+    const bg = sidebarBg.replace('#','');
+    if (bg.length === 6) {
+      const r=parseInt(bg.slice(0,2),16), g=parseInt(bg.slice(2,4),16), b=parseInt(bg.slice(4,6),16);
+      return (r*299+g*587+b*114)/1000 > 128;
+    }
+    return false;
+  })();
+  const navTextActive = isSidebarLight ? '#111827' : '#ffffff';
+  const navTextInactive = isSidebarLight ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.75)';
+  const sectionLabelColor = isSidebarLight ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.25)';
+  const dividerColor = isSidebarLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.07)';
+  const companyNameColor = isSidebarLight ? '#111827' : '#ffffff';
+  const locationSubColor = isSidebarLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.35)';
+  const footerTextColor = isSidebarLight ? 'rgba(0,0,0,0.55)' : '#ffffff';
 
   const [allUsers, setAllUsers] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -381,12 +405,12 @@ export default function Preview() {
 
           {/* Sidebar */}
           <div style={{ width:210, flexShrink:0, borderRadius:12, overflow:'hidden', boxShadow:'0 4px 20px rgba(0,0,0,0.15)', background:sidebarBg }}>
-            <div style={{ padding:'14px 14px 12px', borderBottom:'1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ padding:'14px 14px 12px', borderBottom:`1px solid ${dividerColor}` }}>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <div style={{ width:28, height:28, borderRadius:7, background:primary, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}>🏢</div>
                 <div>
-                  <div><span style={{ fontWeight:700, fontSize:13, color:'#ffffff' }}>{previewData.theme?.company_name||'ShiftManager'}</span></div>
-                  <div><span style={{ fontSize:10, color:'rgba(255,255,255,0.35)' }}>{locationName}</span></div>
+                  <div><span style={{ fontWeight:700, fontSize:13, color:companyNameColor }}>{previewData.theme?.company_name||'ShiftManager'}</span></div>
+                  <div><span style={{ fontSize:10, color:locationSubColor }}>{locationName}</span></div>
                 </div>
               </div>
             </div>
@@ -398,27 +422,27 @@ export default function Preview() {
                 return (
                   <div key={section}>
                     <div style={{ padding:'10px 8px 4px' }}>
-                      <span style={{ fontSize:9, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:'rgba(255,255,255,0.25)' }}>{label}</span>
+                      <span style={{ fontSize:9, fontWeight:700, letterSpacing:1.5, textTransform:'uppercase', color:sectionLabelColor }}>{label}</span>
                     </div>
                     {items.map(item => (
                       <div key={item.id} onClick={() => setActivePage(item.id)}
                         style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px', borderRadius:7, marginBottom:1, cursor:'pointer',
                           background: activePage === item.id ? primary : 'transparent' }}>
                         <span style={{ fontSize:14, flexShrink:0 }}>{item.icon}</span>
-                        <span style={{ fontSize:13, fontWeight: activePage===item.id?700:400, color:'#ffffff', opacity: activePage===item.id?1:0.75 }}>{item.label}</span>
+                        <span style={{ fontSize:13, fontWeight: activePage===item.id?700:400, color: activePage===item.id?navTextActive:navTextInactive }}>{item.label}</span>
                       </div>
                     ))}
                   </div>
                 );
               })}
             </nav>
-            <div style={{ padding:'10px 12px', borderTop:'1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ padding:'10px 12px', borderTop:`1px solid ${dividerColor}` }}>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <div style={{ width:28, height:28, borderRadius:'50%', background:USER_TYPE_COLORS[u.user_type]||primary, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:13, flexShrink:0 }}>
                   <span style={{ color:'#ffffff' }}>{u.name?.trim()?.[0]?.toUpperCase()}</span>
                 </div>
                 <div style={{ minWidth:0 }}>
-                  <div><span style={{ fontWeight:600, fontSize:12, color:'#ffffff' }}>{u.name}</span></div>
+                  <div><span style={{ fontWeight:600, fontSize:12, color:footerTextColor }}>{u.name}</span></div>
                   <span style={{ background:USER_TYPE_COLORS[u.user_type]+'40', color:USER_TYPE_COLORS[u.user_type], padding:'1px 6px', borderRadius:8, fontWeight:700, fontSize:10 }}>
                     {USER_TYPE_LABELS[u.user_type]}
                   </span>

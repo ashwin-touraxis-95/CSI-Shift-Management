@@ -6,12 +6,13 @@ import io from 'socket.io-client';
 const socket = io(process.env.NODE_ENV === 'production' ? 'https://csi-shift-app.up.railway.app' : 'http://localhost:5000');
 
 export default function Dashboard() {
-  const { user, can, theme } = useAuth();
+  const { user, can, theme, isAdmin, isManager, isLeader } = useAuth();
+  const isAgent = user?.user_type === 'agent';
   const [availability, setAvailability] = useState([]);
   const [clockStatus, setClockStatus] = useState({ clockedIn: false });
   const [breakStatus, setBreakStatus] = useState({ onBreak: false, currentBreak: null, todayBreaks: [] });
   const [breakTypes, setBreakTypes] = useState([]);
-  const [deptFilter, setDeptFilter] = useState('all');
+  const [deptFilter, setDeptFilter] = useState(null); // null = user's dept; set on load
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
@@ -98,15 +99,19 @@ export default function Dashboard() {
     catch (e) { showMsg(e.response?.data?.error || 'Error', 'error'); }
   };
 
-  // Agents only see departments that have actual agents in them (hides Management, Trainees etc)
-  const agentOnlyDepts = isAgent
-    ? departments.filter(d => availability.some(u => u.department === d.name && u.user_type === 'agent'))
-    : departments;
-
-  // For agents: filter to agents only. Also respect dept filter.
-  const filtered = deptFilter === 'all'
-    ? (isAgent ? availability.filter(u => u.user_type === 'agent') : availability)
-    : availability.filter(u => u.department === deptFilter && (isAgent ? u.user_type === 'agent' : true));
+  // Hide Trainees from availability board entirely
+  const visibleAvailability = availability.filter(u => u.department !== 'Trainees');
+  // Compute effective dept filter — default to user's own dept
+  const effectiveDept = deptFilter === null ? (user?.department || 'all') : deptFilter;
+  // Departments available for filter (no Trainees, no Management for agents)
+  const agentOnlyDepts = departments.filter(d =>
+    d.name !== 'Trainees' &&
+    (isAdmin || isManager || isLeader || availability.some(u => u.department === d.name && u.user_type === 'agent'))
+  );
+  // Filter availability
+  const filtered = effectiveDept === 'all'
+    ? visibleAvailability.filter(u => !isAgent || u.user_type === 'agent')
+    : visibleAvailability.filter(u => u.department === effectiveDept && (!isAgent || u.user_type === 'agent'));
   const online = filtered.filter(u => u.status === 'available');
   const onBreak = filtered.filter(u => u.status === 'on_break');
   const offline = filtered.filter(u => !u.status || (u.status !== 'available' && u.status !== 'on_break'));
@@ -174,12 +179,12 @@ export default function Dashboard() {
       ? Math.round((new Date() - new Date(agent.break_started_at)) / 60000) : null;
     const borderColor = isOnline ? (theme?.online_color||'#22C55E') : isBreaking ? (agent.break_type_color||'#F59E0B') : (theme?.offline_color||'#94A3B8');
     return (
-      <div style={{ padding:'10px 12px', borderRadius:10, marginBottom:8, border:'1px solid #E2E8F0', borderLeft:`3px solid ${borderColor}`, background:'white', display:'flex', alignItems:'center', gap:10, opacity:(!isOnline&&!isBreaking)?0.6:1 }}>
-        <div style={{ width:34, height:34, borderRadius:'50%', background:avatarColor(agent.name), color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:13, flexShrink:0, overflow:'hidden' }}>
-          {agent.avatar ? <img src={agent.avatar} alt="" style={{ width:34, height:34, borderRadius:'50%' }}/> : agent.name?.trim()?.[0]?.toUpperCase()}
+      <div style={{ padding:'8px 10px', borderRadius:8, border:'1px solid #E2E8F0', borderLeft:`3px solid ${borderColor}`, background:'white', display:'flex', alignItems:'center', gap:8, opacity:(!isOnline&&!isBreaking)?0.6:1 }}>
+        <div style={{ width:28, height:28, borderRadius:'50%', background:avatarColor(agent.name), color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:11, flexShrink:0, overflow:'hidden' }}>
+          {agent.avatar ? <img src={agent.avatar} alt="" style={{ width:28, height:28, borderRadius:'50%' }}/> : agent.name?.trim()?.[0]?.toUpperCase()}
         </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontWeight:600, fontSize:13, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{agent.name}</div>
+          <div style={{ fontWeight:600, fontSize:12, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{agent.name}</div>
           <div style={{ fontSize:11, color:'#9CA3AF', marginTop:1 }}>
             {isBreaking
               ? <span style={{ color:agent.break_type_color||'#F59E0B', fontWeight:500 }}>{agent.break_type_icon} {agent.break_type_name}{canOverride&&breakMins!==null?` · ${breakMins}m`:''}</span>
@@ -240,9 +245,9 @@ export default function Dashboard() {
               <div style={{ width:8, height:8, borderRadius:'50%', background:'#22C55E' }}/>
               Live Availability
             </div>
-            <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)}
+            <select value={effectiveDept} onChange={e => setDeptFilter(e.target.value)}
               style={{ padding:'5px 12px', borderRadius:8, border:'1px solid #E2E8F0', fontSize:12, fontFamily:'inherit', background:'white', color:'#374151' }}>
-              <option value="all">All Departments</option>
+              {(isAdmin || isManager) && <option value="all">All Departments</option>}
               {agentOnlyDepts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
           </div>
@@ -250,21 +255,21 @@ export default function Dashboard() {
           <div className="card" style={{ padding:0, overflow:'hidden', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', minHeight:400 }}>
             <div style={{ borderRight:'1px solid #F1F5F9', display:'flex', flexDirection:'column', overflow:'hidden' }}>
               <ColHeader label="Online" count={online.length} color={theme?.online_color||'#22C55E'}/>
-              <div style={{ flex:1, padding:10, overflowY:'auto' }}>
+              <div style={{ flex:1, padding:8, overflowY:'auto', display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:6, alignContent:'start' }}>
                 {online.map(a => <AgentCard key={a.id} agent={a}/>)}
-                {online.length===0 && <div style={{ padding:20, textAlign:'center', color:'#D1D5DB', fontSize:12 }}>No one online</div>}
+                {online.length===0 && <div style={{ padding:20, textAlign:'center', color:'#D1D5DB', fontSize:12, gridColumn:'1/-1' }}>No one online</div>}
               </div>
             </div>
             <div style={{ borderRight:'1px solid #F1F5F9', display:'flex', flexDirection:'column', overflow:'hidden' }}>
               <ColHeader label="Away" count={onBreak.length} color="#F59E0B"/>
-              <div style={{ flex:1, padding:10, overflowY:'auto' }}>
+              <div style={{ flex:1, padding:8, overflowY:'auto', display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:6, alignContent:'start' }}>
                 {onBreak.map(a => <AgentCard key={a.id} agent={a}/>)}
                 {onBreak.length===0 && <div style={{ padding:20, textAlign:'center', color:'#D1D5DB', fontSize:12 }}>No one away</div>}
               </div>
             </div>
             <div style={{ display:'flex', flexDirection:'column', overflow:'hidden' }}>
               <ColHeader label="Offline" count={offline.length} color={theme?.offline_color||'#94A3B8'}/>
-              <div style={{ flex:1, padding:10, overflowY:'auto' }}>
+              <div style={{ flex:1, padding:8, overflowY:'auto', display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:6, alignContent:'start' }}>
                 {offline.map(a => <AgentCard key={a.id} agent={a}/>)}
                 {offline.length===0 && <div style={{ padding:20, textAlign:'center', color:'#D1D5DB', fontSize:12 }}>No one offline</div>}
               </div>

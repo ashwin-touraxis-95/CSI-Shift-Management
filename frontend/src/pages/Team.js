@@ -17,6 +17,13 @@ export default function Team() {
   const [tempPasswordModal, setTempPasswordModal] = useState(null); // { name, tempPassword }
 
   const isTeamLeader = me?.user_type === 'team_leader';
+  const [filterDept, setFilterDept] = useState('all');
+  const [filterLocation, setFilterLocation] = useState('all');
+  const [filterUserType, setFilterUserType] = useState('all');
+  const [filterJobRole, setFilterJobRole] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('active');
+  const [deactivateModal, setDeactivateModal] = useState(null); // { id, name }
+  const [deactivateEndDate, setDeactivateEndDate] = useState('');
 
   const assignableRoles = () => {
     if (isAdmin || isManager) return [
@@ -49,8 +56,8 @@ export default function Team() {
     }
   };
   const fetchDepts = async () => {
-    try { const r = await axios.get('/api/departments'); setDepts(Array.isArray(r.data) ? r.data.map(d=>d.name) : []); }
-    catch { setDepts(['CS','Sales','Travel Agents','Trainees','Management']); }
+    try { const r = await axios.get('/api/departments'); setDepts(Array.isArray(r.data) ? r.data.map(d=>d.name).filter(n=>n!=='Trainees') : []); }
+    catch { setDepts(['CS','Sales','Travel Agents','Management']); }
   };
 
   const fetchJobRoles = async () => {
@@ -103,17 +110,18 @@ export default function Team() {
 
   const handleSave = async (user) => {
     try {
-      const loc = user.location && user.location !== 'null' ? user.location : 'SA';
-      const tz = user.timezone || 'Africa/Johannesburg';
+      const loc = user.location && user.location !== 'null' && user.location !== '' ? user.location : 'SA';
+      // Look up timezone from locations list; fall back to stored timezone or SA default
+      const locObj = locations.find(l => l.code === loc);
+      const tz = locObj?.timezone || user.timezone || 'Africa/Johannesburg';
       await axios.put(`/api/users/${user.id}`, { user_type:user.user_type, department:user.department, name:user.name, timezone:tz, location:loc });
       setEditing(null); fetchUsers(); msg('User updated!');
     } catch(e) { msg(e.response?.data?.error||'Error','error'); }
   };
 
-  const handleSetActive = async (id, active) => {
-    if (!active && !window.confirm('Deactivate this user? They will not be able to log in.')) return;
+  const handleSetActive = async (id, active, endDate) => {
     try {
-      await axios.post(`/api/users/${id}/set-active`, { active });
+      await axios.post(`/api/users/${id}/set-active`, { active, end_date: endDate || null });
       fetchUsers(); msg(active ? 'User reactivated!' : 'User deactivated.');
     } catch(e) { msg(e.response?.data?.error||'Error','error'); }
   };
@@ -136,8 +144,33 @@ export default function Team() {
 
   const active = users.filter(u => u.active !== 0);
   const inactive = users.filter(u => u.active === 0);
-  const displayed = showInactive ? inactive : active;
+  const allDisplayed = filterStatus === 'inactive' ? inactive : active;
+  const displayed = allDisplayed.filter(u =>
+    (filterDept === 'all' || u.department === filterDept) &&
+    (filterLocation === 'all' || (u.location||'SA') === filterLocation) &&
+    (filterUserType === 'all' || u.user_type === filterUserType) &&
+    (filterJobRole === 'all' || (agentRoles[u.id]||[]).some(rId => String(rId)===String(filterJobRole)))
+  );
   const roleColor = { manager:'#2980B9', team_leader:'#8E44AD', agent:'#27AE60' };
+
+  const DeactivateModal = () => (
+    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000 }}>
+      <div className="card fade-in" style={{ width:400,padding:32 }}>
+        <h2 style={{ marginBottom:8 }}>Deactivate User</h2>
+        <p style={{ color:'var(--gray-500)',fontSize:14,marginBottom:20 }}>
+          Deactivating <strong>{deactivateModal?.name}</strong> will prevent them from logging in. Set an end date for hours tracking.
+        </p>
+        <div style={{ marginBottom:20 }}>
+          <label>End Date <span style={{ color:'var(--gray-400)',fontSize:12,fontWeight:400 }}>(last day to track hours)</span></label>
+          <input type="date" value={deactivateEndDate} onChange={e=>setDeactivateEndDate(e.target.value)} style={{ width:'100%' }}/>
+        </div>
+        <div style={{ display:'flex',gap:8 }}>
+          <button className="btn btn-danger" onClick={async()=>{ await handleSetActive(deactivateModal.id,false,deactivateEndDate); setDeactivateModal(null); setDeactivateEndDate(''); }}>Deactivate</button>
+          <button className="btn btn-secondary" onClick={()=>{ setDeactivateModal(null); setDeactivateEndDate(''); }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div>
@@ -184,9 +217,36 @@ export default function Team() {
         </div>
       )}
 
-      <div style={{ display:'flex',gap:8,marginBottom:16 }}>
-        <button onClick={()=>setShowInactive(false)} style={{ padding:'7px 18px',borderRadius:20,border:'none',background:!showInactive?'var(--red)':'var(--gray-200)',color:!showInactive?'white':'var(--gray-700)',fontFamily:'inherit',fontSize:13,fontWeight:600,cursor:'pointer' }}>Active ({active.length})</button>
-        <button onClick={()=>setShowInactive(true)} style={{ padding:'7px 18px',borderRadius:20,border:'none',background:showInactive?'var(--red)':'var(--gray-200)',color:showInactive?'white':'var(--gray-700)',fontFamily:'inherit',fontSize:13,fontWeight:600,cursor:'pointer' }}>Deactivated ({inactive.length})</button>
+      {/* Status tabs */}
+      <div style={{ display:'flex',gap:8,marginBottom:12 }}>
+        <button onClick={()=>setFilterStatus('active')} style={{ padding:'7px 18px',borderRadius:20,border:'none',background:filterStatus==='active'?'var(--red)':'var(--gray-200)',color:filterStatus==='active'?'white':'var(--gray-700)',fontFamily:'inherit',fontSize:13,fontWeight:600,cursor:'pointer' }}>Active ({active.length})</button>
+        <button onClick={()=>setFilterStatus('inactive')} style={{ padding:'7px 18px',borderRadius:20,border:'none',background:filterStatus==='inactive'?'var(--red)':'var(--gray-200)',color:filterStatus==='inactive'?'white':'var(--gray-700)',fontFamily:'inherit',fontSize:13,fontWeight:600,cursor:'pointer' }}>Deactivated ({inactive.length})</button>
+      </div>
+      {/* Filter bar */}
+      <div style={{ display:'flex',gap:8,flexWrap:'wrap',marginBottom:16,padding:'10px 14px',background:'var(--gray-50)',borderRadius:10,border:'1px solid var(--gray-200)' }}>
+        <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid var(--gray-200)',fontSize:12,fontFamily:'inherit' }}>
+          <option value="all">All Departments</option>
+          {depts.map(d=><option key={d} value={d}>{d}</option>)}
+        </select>
+        <select value={filterLocation} onChange={e=>setFilterLocation(e.target.value)} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid var(--gray-200)',fontSize:12,fontFamily:'inherit' }}>
+          <option value="all">All Locations</option>
+          {locations.map(l=><option key={l.code} value={l.code}>{l.name} ({l.code})</option>)}
+        </select>
+        <select value={filterUserType} onChange={e=>setFilterUserType(e.target.value)} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid var(--gray-200)',fontSize:12,fontFamily:'inherit' }}>
+          <option value="all">All User Types</option>
+          <option value="account_admin">Account Admin</option>
+          <option value="manager">Manager</option>
+          <option value="team_leader">Team Leader</option>
+          <option value="agent">Agent</option>
+        </select>
+        <select value={filterJobRole} onChange={e=>setFilterJobRole(e.target.value)} style={{ padding:'5px 10px',borderRadius:7,border:'1px solid var(--gray-200)',fontSize:12,fontFamily:'inherit' }}>
+          <option value="all">All Job Roles</option>
+          {jobRoles.map(jr=><option key={jr.id} value={jr.id}>{jr.name}</option>)}
+        </select>
+        {(filterDept!=='all'||filterLocation!=='all'||filterUserType!=='all'||filterJobRole!=='all') && (
+          <button onClick={()=>{setFilterDept('all');setFilterLocation('all');setFilterUserType('all');setFilterJobRole('all');}} style={{ padding:'5px 12px',borderRadius:7,border:'1px solid var(--gray-200)',background:'white',fontSize:12,fontFamily:'inherit',cursor:'pointer',color:'var(--gray-600)' }}>✕ Clear</button>
+        )}
+        <span style={{ marginLeft:'auto',fontSize:12,color:'var(--gray-500)',alignSelf:'center' }}>{displayed.length} user{displayed.length!==1?'s':''}</span>
       </div>
 
       {/* Add User Modal */}
@@ -291,9 +351,7 @@ export default function Team() {
                             : <><option value="SA">South Africa (SA)</option><option value="PH">Philippines (PH)</option></>
                           }
                         </select>
-                      : <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background: user.location==='PH'?'#FEF3C7':'#EFF6FF', color: user.location==='PH'?'#92400E':'#1D4ED8' }}>
-                          {user.location || 'SA'}
-                        </span>
+                      : (() => { const locObj = locations.find(l=>l.code===(user.location||'SA')); const isSA=(user.location||'SA')==='SA'; return <span style={{ padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:700, background:isSA?'#ECFDF5':'#EFF6FF', color:isSA?'#065F46':'#1D4ED8' }}>{locObj?.name||user.location||'SA'}</span>; })()
                     }
                   </td>
                   <td style={{ padding:'12px 16px' }}>
@@ -343,9 +401,9 @@ export default function Team() {
                         <button className="btn btn-secondary btn-sm" onClick={()=>{ setEditing({...user}); fetchAgentRoles(user.id); }}>Edit</button>
                         <button className="btn btn-secondary btn-sm" onClick={()=>handleResetPassword(user)} title="Reset password">🔑 Reset</button>
                         {user.active!==0
-                          ? <button className="btn btn-warning btn-sm" onClick={()=>handleSetActive(user.id,false)}>Deactivate</button>
+                          ? <button className="btn btn-warning btn-sm" onClick={()=>{ const today=new Date().toISOString().slice(0,10); setDeactivateEndDate(today); setDeactivateModal({id:user.id,name:user.name}); }}>Deactivate</button>
                           : <button className="btn btn-success btn-sm" onClick={()=>handleSetActive(user.id,true)}>Activate</button>}
-                        {(isAdmin||isManager) && <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(user.id)}>Delete</button>}
+                        {isAdmin && <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(user.id)}>Delete</button>}
                       </div>
                     )}
                   </td>
@@ -356,5 +414,6 @@ export default function Team() {
         </table>
       </div>
     </div>
+    {deactivateModal && <DeactivateModal/>}
   );
 }

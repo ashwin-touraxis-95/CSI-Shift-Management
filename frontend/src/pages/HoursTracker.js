@@ -114,7 +114,7 @@ export default function HoursTracker() {
       ]);
       setShifts(sr.data);
       setUsers(ur.data.filter(u=>u.active!==0));
-      setDepts(dr.data);
+      setDepts(dr.data.filter(d=>d.name!=='Trainees'));
       setLeaves(lr.data||[]);
       setPublicHolidays([...(phr.data||[]), ...(phr2.data||[])]);
       setLeaveTypes(ltr.data||[]);

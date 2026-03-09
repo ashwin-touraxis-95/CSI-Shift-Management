@@ -676,15 +676,20 @@ app.post('/api/users/:id/set-active', requireAuth, async (req, res) => {
   if (!['account_admin','manager','team_leader'].includes(u.user_type)) return res.status(403).json({ error:'Permission denied' });
   const target = await get('SELECT * FROM users WHERE id=$1',[req.params.id]);
   if (!target||target.user_type==='account_admin') return res.status(403).json({ error:'Cannot modify admin' });
-  const { active } = req.body;
-  await run('UPDATE users SET active=$1 WHERE id=$2',[active?1:0,req.params.id]);
-  if (!active) { await run("UPDATE availability SET status='offline' WHERE user_id=$1",[req.params.id]); io.emit('availability_update'); }
+  const { active, end_date } = req.body;
+  if (active) {
+    await run('UPDATE users SET active=1,end_date=NULL WHERE id=$1',[req.params.id]);
+  } else {
+    await run('UPDATE users SET active=0,end_date=$1 WHERE id=$2',[end_date||null,req.params.id]);
+    await run("UPDATE availability SET status='offline' WHERE user_id=$1",[req.params.id]);
+    io.emit('availability_update');
+  }
   await auditLog(active?'user_activated':'user_deactivated',u.id,target);
   res.json({ ok: true });
 });
 app.delete('/api/users/:id', requireAuth, async (req, res) => {
   const u = req.user;
-  if (!['account_admin','manager'].includes(u.user_type)) return res.status(403).json({ error:'Only Admin or Manager can delete users' });
+  if (u.user_type !== 'account_admin') return res.status(403).json({ error:'Only Account Admin can delete users' });
   const target = await get('SELECT * FROM users WHERE id=$1',[req.params.id]);
   if (!target||target.user_type==='account_admin') return res.status(403).json({ error:'Cannot delete admin' });
   await auditLog('user_deleted',u.id,target,`Permanently deleted by ${u.name}`);

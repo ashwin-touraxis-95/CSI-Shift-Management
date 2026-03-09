@@ -264,10 +264,10 @@ export default function AdminPanel() {
   const tabs = [
     { id:'theme',       label:'🎨 Theme & Branding',  show: isAccountAdmin },
     { id:'display',     label:'📺 Display Screen',     show: isAccountAdmin },
-    { id:'structure',   label:'🏢 Org Structure',      show: isAccountAdmin || isManager },
+    { id:'structure',   label:'🏢 Org Structure',      show: isAccountAdmin || isManager || isTeamLeader },
     { id:'visibility',  label:'👁 Module Visibility',  show: isAccountAdmin },
     { id:'locations',   label:'📍 Locations',           show: isAccountAdmin },
-    { id:'breaks',      label:'☕ Break Types',         show: isAccountAdmin || isManager },
+    { id:'breaks',      label:'☕ Break Types',         show: isAccountAdmin || isManager || isTeamLeader },
     { id:'hours',       label:'📊 Hours Targets',       show: isAccountAdmin || isManager },
     { id:'holidays',    label:'🗓 Public Holidays',     show: canManageHolidays },
     { id:'bigquery',    label:'📊 Sheets Sync',         show: isAccountAdmin },

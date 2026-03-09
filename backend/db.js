@@ -199,6 +199,7 @@ async function initDb() {
   try { await query("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'Africa/Johannesburg'"); } catch(e) {}
   try { await query("ALTER TABLE users ADD COLUMN session_token TEXT"); } catch(e) {}
   try { await query("ALTER TABLE users ADD COLUMN location TEXT DEFAULT 'SA'"); } catch(e) {}
+  try { await query("ALTER TABLE users ADD COLUMN end_date TEXT"); } catch(e) {}
 
   // Locations table — admin-managed, each has a name, code, and timezone
   await query(`CREATE TABLE IF NOT EXISTS locations (

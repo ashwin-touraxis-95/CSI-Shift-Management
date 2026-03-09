@@ -43,7 +43,7 @@ export default function ManageShifts() {
     ]);
     const activeAgents = ur.data.filter(u => u.user_type === 'agent' && u.active !== 0);
     setUsers(activeAgents);
-    setTemplates(tr.data); setShifts(dr.data); setDepts(depr.data.map(d=>d.name).filter(n=>n!=='Management'));
+    setTemplates(tr.data); setShifts(dr.data); setDepts(depr.data.map(d=>d.name).filter(n=>n!=='Management'&&n!=='Trainees'));
     setLocations(Array.isArray(locr?.data) ? locr.data : []);
     // Build leave users list (unique users with leave in this month)
     const leaveUserIds = [...new Set((lr.data||[]).map(l => l.user_id))];
@@ -153,8 +153,8 @@ export default function ManageShifts() {
             </div>}
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-              <div><label>Start Time</label><input type="time" value={bulk.start_time} onChange={e=>setBulk(b=>({...b,start_time:e.target.value}))} /></div>
-              <div><label>End Time</label><input type="time" value={bulk.end_time} onChange={e=>setBulk(b=>({...b,end_time:e.target.value}))} /></div>
+              <div><label>Start Time</label><input type="text" placeholder="HH:MM" maxLength={5} value={bulk.start_time} onChange={e=>{const v=e.target.value.replace(/[^0-9:]/g,"");setBulk(b=>({...b,start_time:v}));}} /></div>
+              <div><label>End Time</label><input type="text" placeholder="HH:MM" maxLength={5} value={bulk.end_time} onChange={e=>{const v=e.target.value.replace(/[^0-9:]/g,"");setBulk(b=>({...b,end_time:v}));}} /></div>
               <div style={{ gridColumn:'1/-1' }}>
                 <label>Shift Type</label>
                 <div style={{ display:'flex', gap:8, marginTop:6, flexWrap:'wrap' }}>
@@ -353,8 +353,8 @@ export default function ManageShifts() {
             <h3 style={{ fontWeight:700, marginBottom:16 }}>Save New Template</h3>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div style={{ gridColumn:'1/-1' }}><label>Template Name</label><input placeholder="e.g. Morning Shift, Night Shift..." value={tplForm.name} onChange={e=>setTplForm(f=>({...f,name:e.target.value}))} /></div>
-              <div><label>Start Time</label><input type="time" value={tplForm.start_time} onChange={e=>setTplForm(f=>({...f,start_time:e.target.value}))} /></div>
-              <div><label>End Time</label><input type="time" value={tplForm.end_time} onChange={e=>setTplForm(f=>({...f,end_time:e.target.value}))} /></div>
+              <div><label>Start Time</label><input type="text" placeholder="HH:MM" maxLength={5} value={tplForm.start_time} onChange={e=>{const v=e.target.value.replace(/[^0-9:]/g,"");setTplForm(f=>({...f,start_time:v}));}} /></div>
+              <div><label>End Time</label><input type="text" placeholder="HH:MM" maxLength={5} value={tplForm.end_time} onChange={e=>{const v=e.target.value.replace(/[^0-9:]/g,"");setTplForm(f=>({...f,end_time:v}));}} /></div>
               <div style={{ gridColumn:'1/-1' }}><label>Notes</label><input placeholder="Optional notes" value={tplForm.notes} onChange={e=>setTplForm(f=>({...f,notes:e.target.value}))} /></div>
             </div>
             <button className="btn btn-primary" style={{ marginTop:16 }} onClick={handleSaveTemplate}>Save Template</button>

@@ -12,7 +12,7 @@ export default function Schedule() {
     if (isManager || isLeader) return agent.department === user?.department;
     return false;
   };
-  const [view, setView] = useState('week');
+  const [view, setView] = useState('day');
   const [current, setCurrent] = useState(new Date());
   const [shifts, setShifts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -55,7 +55,7 @@ export default function Schedule() {
     ]);
     setShifts(sr.data);
     setUsers(ur.data.filter(u => u.active !== 0));
-    setDepts(depr.data);
+    setDepts(depr.data.filter(d=>d.name!=='Trainees'));
     setSettings(setr.data);
     setLeaves(lr.data || []);
     setPublicHolidays(phr.data || []);
@@ -193,31 +193,57 @@ export default function Schedule() {
                           </div>
                         )}
 
-                        {/* Shift bubbles */}
+                        {/* Shift bubbles — supports overnight shifts wrapping past midnight */}
                         {agentShifts.map(s => {
                           const startM = toMinutes(s.start_time);
-                          const endM = toMinutes(s.end_time) || 24*60;
-                          const leftPct = pct(startM);
-                          const widthPct = `${((endM-startM)/((TIMELINE_END-TIMELINE_START)*60))*100}%`;
+                          const rawEnd = toMinutes(s.end_time);
+                          const endM = rawEnd <= startM && rawEnd !== 0 ? 24*60 : (rawEnd || 24*60);
+                          const isOvernight = rawEnd < startM && rawEnd !== 0;
                           const isDraft = s.status==='draft';
+                          const bubbleBg = isDraft?'#fef9c3':'#dcfce7';
+                          const bubbleBorder = isDraft?'#fbbf24':'#4ade80';
+                          const bubbleColor = isDraft?'#92400e':'#15803d';
+                          const label = `${s.start_time.slice(0,5)}–${s.end_time.slice(0,5)}`;
+                          // Segment 1: from start to midnight (or end if not overnight)
+                          const seg1Left = pct(startM);
+                          const seg1Width = `${((endM-startM)/((TIMELINE_END-TIMELINE_START)*60))*100}%`;
                           return (
-                            <div key={s.id} style={{
-                              position:'absolute', top:'10%', height:'80%',
-                              left:leftPct, width:widthPct,
-                              background:isDraft?'#fef9c3':'#dcfce7',
-                              border:`1.5px solid ${isDraft?'#fbbf24':'#4ade80'}`,
-                              borderRadius:6, zIndex:2,
-                              display:'flex', alignItems:'center', justifyContent:'center',
-                              overflow:'hidden', cursor:'default',
-                              minWidth:2
-                            }}
-                            title={`${s.start_time.slice(0,5)}–${s.end_time.slice(0,5)}${isDraft?' (draft)':''}`}
-                            onClick={()=>setEditCell({ agent, date:dayStr, shift:s })}
-                            >
-                              <span style={{ fontSize:11, fontWeight:700, color:isDraft?'#92400e':'#15803d', whiteSpace:'nowrap', padding:'0 4px', overflow:'hidden', textOverflow:'ellipsis', fontFamily:'DM Mono' }}>
-                                {s.start_time.slice(0,5)}–{s.end_time.slice(0,5)}
-                              </span>
-                            </div>
+                            <React.Fragment key={s.id}>
+                              <div style={{
+                                position:'absolute', top:'10%', height:'80%',
+                                left:seg1Left, width:seg1Width,
+                                background:bubbleBg, border:`1.5px solid ${bubbleBorder}`,
+                                borderRadius: isOvernight ? '6px 0 0 6px' : 6,
+                                zIndex:2, display:'flex', alignItems:'center', justifyContent:'center',
+                                overflow:'hidden', cursor:'pointer', minWidth:2
+                              }}
+                              title={`${label}${isDraft?' (draft)':''}${isOvernight?' · overnight':''}`}
+                              onClick={()=>setEditCell({ agent, date:dayStr, shift:s })}
+                              >
+                                <span style={{ fontSize:11, fontWeight:700, color:bubbleColor, whiteSpace:'nowrap', padding:'0 4px', overflow:'hidden', textOverflow:'ellipsis', fontFamily:'DM Mono' }}>
+                                  {label}{isOvernight?' 🌙':''}
+                                </span>
+                              </div>
+                              {/* Overnight continuation: 00:00 to end time */}
+                              {isOvernight && (
+                                <div style={{
+                                  position:'absolute', top:'10%', height:'80%',
+                                  left:'0%', width:pct(rawEnd),
+                                  background:bubbleBg, border:`1.5px solid ${bubbleBorder}`,
+                                  borderRadius:'0 6px 6px 0', borderLeft:'none',
+                                  zIndex:2, display:'flex', alignItems:'center', justifyContent:'center',
+                                  overflow:'hidden', cursor:'pointer', minWidth:2,
+                                  opacity:0.75
+                                }}
+                                title={`Continues from previous day · ends ${s.end_time.slice(0,5)}`}
+                                onClick={()=>setEditCell({ agent, date:dayStr, shift:s })}
+                                >
+                                  <span style={{ fontSize:10, fontWeight:600, color:bubbleColor, whiteSpace:'nowrap', padding:'0 4px', fontFamily:'DM Mono' }}>
+                                    ↩ {s.end_time.slice(0,5)}
+                                  </span>
+                                </div>
+                              )}
+                            </React.Fragment>
                           );
                         })}
 
