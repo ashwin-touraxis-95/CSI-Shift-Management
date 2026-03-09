@@ -37,7 +37,7 @@ export default function Layout({ children }) {
 
   const sidebarBg = theme?.sidebar_bg || '#111827';
   const sidebarActive = theme?.sidebar_active || 'var(--red)';
-  const sidebarText = theme?.sidebar_text || 'rgba(255,255,255,0.5)';
+  const sidebarText = theme?.sidebar_text || 'rgba(255,255,255,0.85)';
   const sidebarSectionLabel = theme?.sidebar_section_label || 'rgba(255,255,255,0.25)';
   const sidebarDivider = theme?.sidebar_divider || 'rgba(255,255,255,0.07)';
   const sidebarNameColor = theme?.sidebar_name_color || 'white';
@@ -51,11 +51,27 @@ export default function Layout({ children }) {
   const locationLabel = theme?.location_label || 'South Africa';
   const logo = theme?.company_logo;
 
+  // Determine if sidebar is light-coloured to pick readable text defaults
+  const isSidebarLight = (() => {
+    const bg = (theme?.sidebar_bg || '#111827').replace('#','');
+    if (bg.length === 3) {
+      const r=parseInt(bg[0]+bg[0],16), g=parseInt(bg[1]+bg[1],16), b=parseInt(bg[2]+bg[2],16);
+      return (r*299+g*587+b*114)/1000 > 128;
+    }
+    if (bg.length === 6) {
+      const r=parseInt(bg.slice(0,2),16), g=parseInt(bg.slice(2,4),16), b=parseInt(bg.slice(4,6),16);
+      return (r*299+g*587+b*114)/1000 > 128;
+    }
+    return false;
+  })();
+  const navTextInactive = theme?.sidebar_text || (isSidebarLight ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.85)');
+  const navTextActive = isSidebarLight ? '#111827' : 'white';
+
   const NavItem = ({ to, icon, label }) => (
     <NavLink to={to} style={({ isActive }) => ({
       display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:8, marginBottom:2,
       textDecoration:'none', fontSize:14, fontWeight:500, transition:'all 0.15s',
-      color: isActive ? 'white' : sidebarText,
+      color: isActive ? navTextActive : navTextInactive,
       background: isActive ? sidebarActive : 'transparent',
     })}>
       <span>{icon}</span>{label}

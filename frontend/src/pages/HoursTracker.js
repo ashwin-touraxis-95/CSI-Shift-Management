@@ -767,7 +767,7 @@ export default function HoursTracker() {
                     const month = (() => {
                       let normal=0,ot1=0,ot15=0,ot2=0,leave=0;
                       for (const week of deptWks) {
-                        const d = getAgentWeekData(agent.id,week);
+                        const d = getAgentWeekData(agent.id,week,agent.location||'SA');
                         normal+=d.normal; ot1+=d.ot1; ot15+=d.ot15; ot2+=d.ot2; leave+=d.leave;
                       }
                       const worked=Math.round((normal+ot1+ot15+ot2)*10)/10;

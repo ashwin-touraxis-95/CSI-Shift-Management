@@ -127,6 +127,16 @@ export default function Schedule() {
       && (filterLocation === 'all' || (u.location||'SA') === filterLocation));
     const byDept = agents.reduce((acc,u) => { if(!acc[u.department])acc[u.department]=[]; acc[u.department].push(u); return acc; },{});
     const hasAnything = agents.length > 0;
+
+    // 24-hr timeline helpers
+    const HOURS = Array.from({length:25},(_,i)=>i); // 0..24
+    const TIMELINE_START = 0; // 00:00
+    const TIMELINE_END = 24;  // 24:00
+    const toMinutes = (t) => { const [h,m]=(t||'00:00').split(':').map(Number); return h*60+(m||0); };
+    const pct = (mins) => `${((mins - TIMELINE_START*60)/((TIMELINE_END-TIMELINE_START)*60))*100}%`;
+    const AGENT_ROW_H = 48;
+    const NAME_COL = 160;
+
     return (
       <div className="card" style={{ overflow:'auto' }}>
         {!hasAnything
@@ -134,38 +144,88 @@ export default function Schedule() {
           : Object.entries(byDept).map(([dept, dagents]) => {
             const dc = depts.find(d=>d.name===dept);
             return (
-              <div key={dept}>
+              <div key={dept} style={{ marginBottom:0 }}>
+                {/* Dept header */}
                 <div style={{ padding:'10px 20px', background:dc?dc.bg_color:DEPT_BG[dept]||'#f8f9fa', borderBottom:'1px solid var(--gray-200)' }}>
                   <span style={{ fontWeight:700, fontSize:13, color:dc?dc.color:DEPT_COLORS[dept]||'#333' }}>{dept}</span>
                 </div>
-                {dagents.map(agent => {
+
+                {/* Timeline header row */}
+                <div style={{ display:'flex', borderBottom:'1px solid var(--gray-200)', background:'#f8fafc', position:'sticky', top:0, zIndex:2 }}>
+                  <div style={{ width:NAME_COL, flexShrink:0, padding:'4px 20px', fontSize:10, fontWeight:700, color:'var(--gray-400)', borderRight:'1px solid var(--gray-200)', textTransform:'uppercase', letterSpacing:1 }}>Agent</div>
+                  <div style={{ flex:1, position:'relative', height:24 }}>
+                    {HOURS.filter(h=>h%2===0).map(h => (
+                      <div key={h} style={{ position:'absolute', left:pct(h*60), transform:'translateX(-50%)', fontSize:10, color:'var(--gray-400)', fontWeight:600, top:4, fontFamily:'DM Mono' }}>
+                        {h===0?'12am':h<12?`${h}am`:h===12?'12pm':h===24?'12am':`${h-12}pm`}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Agent rows */}
+                {dagents.map((agent,idx) => {
                   const agentShifts = shifts.filter(s => s.user_id===agent.id && s.date===dayStr);
                   const agentLeave = leaves.find(l => l.user_id===agent.id && l.date_from<=dayStr && l.date_to>=dayStr);
+                  const rowBg = idx%2===0 ? 'white' : '#fafafa';
                   return (
-                    <div key={agent.id} style={{ display:'flex', alignItems:'center', gap:16, padding:'12px 20px', borderBottom:'1px solid var(--gray-100)', background:'white' }}>
-                      <div style={{ width:30,height:30,borderRadius:'50%',background:'var(--red)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12,flexShrink:0 }}>
-                        {agent.name?.trim()?.[0]?.toUpperCase()}
-                      </div>
-                      <div style={{ fontWeight:600, minWidth:140 }}>{agent.name}</div>
-                      {agentShifts.length > 0
-                        ? agentShifts.map(s => (
-                          <div key={s.id} style={{ fontFamily:'DM Mono', fontSize:13, color:'var(--green)', fontWeight:700, background:'#f0fdf4', padding:'4px 12px', borderRadius:6, border:'1px solid #86efac' }}>
-                            {s.start_time.slice(0,5)} – {s.end_time.slice(0,5)}
-                            {s.status==='draft' && <span style={{ marginLeft:6, fontSize:10, background:'#fcd34d', color:'#92400e', padding:'1px 6px', borderRadius:4 }}>Draft</span>}
-                          </div>
-                        ))
-                        : <div style={{ fontSize:13, color:'var(--gray-400)', fontStyle:'italic' }}>No shift</div>
-                      }
-                      {agentLeave && (
-                        <div style={{ fontSize:12, fontWeight:700, padding:'4px 12px', borderRadius:6,
-                          background:agentLeave.leave_type_bg||'#ede9fe', color:agentLeave.leave_type_color||'#6366f1',
-                          border:`1px solid ${agentLeave.leave_type_color||'#6366f1'}40` }}>
-                          🏖️ {agentLeave.leave_type_name}
+                    <div key={agent.id} style={{ display:'flex', borderBottom:'1px solid var(--gray-100)', background:rowBg, minHeight:AGENT_ROW_H }}>
+                      {/* Name column */}
+                      <div style={{ width:NAME_COL, flexShrink:0, display:'flex', alignItems:'center', gap:8, padding:'0 12px 0 20px', borderRight:'1px solid var(--gray-100)' }}>
+                        <div style={{ width:26,height:26,borderRadius:'50%',background:'var(--red)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:11,flexShrink:0 }}>
+                          {agent.name?.trim()?.[0]?.toUpperCase()}
                         </div>
-                      )}
-                      {agentShifts.length === 0 && !agentLeave && (
-                        <div style={{ fontSize:12, color:'var(--gray-300)' }}>—</div>
-                      )}
+                        <span style={{ fontWeight:600, fontSize:13, lineHeight:1.2 }}>{agent.name}</span>
+                      </div>
+
+                      {/* Timeline area */}
+                      <div style={{ flex:1, position:'relative', minHeight:AGENT_ROW_H }}>
+                        {/* Hour grid lines */}
+                        {HOURS.filter(h=>h>0&&h<24).map(h => (
+                          <div key={h} style={{ position:'absolute', top:0, bottom:0, left:pct(h*60), width:1, background:h%6===0?'var(--gray-200)':'var(--gray-100)', zIndex:0 }}/>
+                        ))}
+
+                        {/* Leave bar */}
+                        {agentLeave && (
+                          <div style={{ position:'absolute', top:'20%', height:'60%', left:'0%', right:'0%',
+                            background:agentLeave.leave_type_bg||'#ede9fe', opacity:0.5, borderRadius:4,
+                            display:'flex', alignItems:'center', justifyContent:'center', zIndex:1 }}>
+                            <span style={{ fontSize:11, fontWeight:700, color:agentLeave.leave_type_color||'#6366f1' }}>🏖️ {agentLeave.leave_type_name}</span>
+                          </div>
+                        )}
+
+                        {/* Shift bubbles */}
+                        {agentShifts.map(s => {
+                          const startM = toMinutes(s.start_time);
+                          const endM = toMinutes(s.end_time) || 24*60;
+                          const leftPct = pct(startM);
+                          const widthPct = `${((endM-startM)/((TIMELINE_END-TIMELINE_START)*60))*100}%`;
+                          const isDraft = s.status==='draft';
+                          return (
+                            <div key={s.id} style={{
+                              position:'absolute', top:'10%', height:'80%',
+                              left:leftPct, width:widthPct,
+                              background:isDraft?'#fef9c3':'#dcfce7',
+                              border:`1.5px solid ${isDraft?'#fbbf24':'#4ade80'}`,
+                              borderRadius:6, zIndex:2,
+                              display:'flex', alignItems:'center', justifyContent:'center',
+                              overflow:'hidden', cursor:'default',
+                              minWidth:2
+                            }}
+                            title={`${s.start_time.slice(0,5)}–${s.end_time.slice(0,5)}${isDraft?' (draft)':''}`}
+                            onClick={()=>setEditCell({ agent, date:dayStr, shift:s })}
+                            >
+                              <span style={{ fontSize:11, fontWeight:700, color:isDraft?'#92400e':'#15803d', whiteSpace:'nowrap', padding:'0 4px', overflow:'hidden', textOverflow:'ellipsis', fontFamily:'DM Mono' }}>
+                                {s.start_time.slice(0,5)}–{s.end_time.slice(0,5)}
+                              </span>
+                            </div>
+                          );
+                        })}
+
+                        {/* No shift / no leave indicator */}
+                        {agentShifts.length === 0 && !agentLeave && (
+                          <div style={{ position:'absolute', top:'50%', transform:'translateY(-50%)', left:8, fontSize:12, color:'var(--gray-300)' }}>—</div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
