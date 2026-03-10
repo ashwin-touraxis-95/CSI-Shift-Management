@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { RangePickerPopup } from '../components/RangePicker';
 import axios from 'axios';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
@@ -116,13 +117,12 @@ export default function ClockLogs() {
 
       {/* Compact filter bar — date range as single tile */}
       <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:16, flexWrap:'wrap' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, background:'white', border:'1.5px solid var(--gray-200)', borderRadius:8, padding:'6px 12px' }}>
-          <span style={{ fontSize:11, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:0.5, whiteSpace:'nowrap' }}>From</span>
-          <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)} style={{ border:'none', fontFamily:'inherit', fontSize:13, outline:'none', background:'transparent', cursor:'pointer' }}/>
-          <span style={{ fontSize:11, fontWeight:700, color:'var(--gray-300)', margin:'0 2px' }}>→</span>
-          <span style={{ fontSize:11, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:0.5, whiteSpace:'nowrap' }}>To</span>
-          <input type="date" value={filterDateTo} min={filterDateFrom} onChange={e=>setFilterDateTo(e.target.value)} style={{ border:'none', fontFamily:'inherit', fontSize:13, outline:'none', background:'transparent', cursor:'pointer' }}/>
-        </div>
+        <RangePickerPopup
+          dateFrom={filterDateFrom}
+          dateTo={filterDateTo}
+          onChange={(from,to)=>{ if(from) setFilterDateFrom(from); if(to) setFilterDateTo(to); if(!from&&!to){ setFilterDateFrom(''); setFilterDateTo(''); } }}
+          placeholder="📅 Date range"
+        />
         <select value={filterDept} onChange={e=>setFilterDept(e.target.value)} style={{ padding:'6px 11px', borderRadius:8, border:`1.5px solid ${filterDept?'var(--red)':'var(--gray-200)'}`, fontSize:12, fontFamily:'inherit', background:filterDept?'#fef2f2':'white', color:filterDept?'var(--red)':'var(--gray-700)', fontWeight:filterDept?700:400, cursor:'pointer' }}>
           <option value="">All Departments</option>
           {depts.map(d=><option key={d} value={d}>{d}</option>)}

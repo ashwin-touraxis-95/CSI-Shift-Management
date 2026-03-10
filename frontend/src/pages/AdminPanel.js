@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { RangePickerPopup } from '../components/RangePicker';
 import { useAuth } from '../context/AuthContext';
 import io from 'socket.io-client';
 
@@ -744,19 +745,21 @@ export default function AdminPanel() {
               <button onClick={()=>setHolidayYear(y=>y-1)} style={{ padding:'6px 12px', borderRadius:8, border:'1px solid var(--gray-300)', background:'white', cursor:'pointer', fontWeight:700 }}>‹</button>
               <span style={{ fontWeight:800, fontSize:16, minWidth:60, textAlign:'center' }}>{holidayYear}</span>
               <button onClick={()=>setHolidayYear(y=>y+1)} style={{ padding:'6px 12px', borderRadius:8, border:'1px solid var(--gray-300)', background:'white', cursor:'pointer', fontWeight:700 }}>›</button>
-              <button onClick={async()=>{ if(!window.confirm(`Reset and reload ALL ${holidayYear} holidays (SA + PH)?`)) return; setHolidayLoading(true); await axios.delete(`/api/public-holidays/reset?year=${holidayYear}`); await axios.post('/api/public-holidays/seed',{year:holidayYear}); await fetchHolidays(holidayYear); setHolidayLoading(false); setSaved(`${holidayYear} holidays reloaded cleanly!`); setTimeout(()=>setSaved(''),3000); }} disabled={holidayLoading} style={{ padding:'6px 14px', borderRadius:8, border:'1px solid #16a34a', background:'#f0fdf4', color:'#15803d', fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                🔄 Reset & Reload {holidayYear}
-              </button>
+
             </div>
           </div>
 
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:16, flexWrap:'wrap' }}>
-            <input type="date" value={newHoliday.date} onChange={e=>setNewHoliday(h=>({...h,date:e.target.value}))}
-              style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13 }}/>
+            <RangePickerPopup
+              dateFrom={newHoliday.date}
+              dateTo={newHoliday.date}
+              onChange={(from)=>setNewHoliday(h=>({...h,date:from}))}
+              placeholder="📅 Pick date"
+            />
             <input value={newHoliday.name} onChange={e=>setNewHoliday(h=>({...h,name:e.target.value}))}
-              placeholder="Holiday name..." style={{ flex:1, minWidth:160, padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13 }}/>
+              placeholder="Holiday name..." style={{ flex:1, minWidth:160, padding:'6px 11px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13 }}/>
             <select value={newHoliday.location} onChange={e=>setNewHoliday(h=>({...h,location:e.target.value}))}
-              style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13 }}>
+              style={{ padding:'6px 11px', borderRadius:8, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13 }}>
               {locations.map(l=><option key={l.code} value={l.code}>{l.code==='SA'?'🇿🇦':l.code==='PH'?'🇵🇭':'📍'} {l.name}</option>)}
             </select>
             <button onClick={addHoliday} disabled={!newHoliday.date||!newHoliday.name} className="btn btn-primary btn-sm">➕ Add Holiday</button>

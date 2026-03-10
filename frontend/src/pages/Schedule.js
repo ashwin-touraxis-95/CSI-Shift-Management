@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { RangePickerInline } from '../components/RangePicker';
 import { format, startOfWeek, endOfWeek, addWeeks, addDays, startOfMonth, endOfMonth, addMonths, eachDayOfInterval, getDay, isToday, getWeek, isSameMonth } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 const DEPT_COLORS = { CS:'#856404', Sales:'#383D41', 'Travel Agents':'#0C5460', Trainees:'#721C24', Management:'#155724' };
@@ -747,19 +748,12 @@ export default function Schedule() {
                 )}
                 {/* Date range */}
                 <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:1, color:'var(--gray-400)', marginBottom:6 }}>Date Range</div>
-                <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:12 }}>
-                  <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                    <label style={{ fontSize:11, color:'var(--gray-500)', fontWeight:600 }}>FROM</label>
-                    <input type="date" value={drawerForm.date_from}
-                      onChange={e=>setDrawerForm(f=>({...f,date_from:e.target.value,date_to:f.date_to||e.target.value}))}
-                      style={{ padding:'9px 12px', borderRadius:8, border:'1.5px solid var(--gray-300)', fontFamily:'DM Mono,monospace', fontSize:14, fontWeight:600, background:'white', cursor:'pointer', width:'100%', boxSizing:'border-box' }}/>
-                  </div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                    <label style={{ fontSize:11, color:'var(--gray-500)', fontWeight:600 }}>TO</label>
-                    <input type="date" value={drawerForm.date_to} min={drawerForm.date_from}
-                      onChange={e=>setDrawerForm(f=>({...f,date_to:e.target.value}))}
-                      style={{ padding:'9px 12px', borderRadius:8, border:'1.5px solid var(--gray-300)', fontFamily:'DM Mono,monospace', fontSize:14, fontWeight:600, background:'white', cursor:'pointer', width:'100%', boxSizing:'border-box' }}/>
-                  </div>
+                <div style={{ marginBottom:12 }}>
+                  <RangePickerInline
+                    dateFrom={drawerForm.date_from}
+                    dateTo={drawerForm.date_to}
+                    onChange={(from,to)=>setDrawerForm(f=>({...f,date_from:from,date_to:to}))}
+                  />
                 </div>
                 {drawerMode === 'assign' && (
                   <div style={{ display:'flex', gap:8, marginBottom:16 }}>
@@ -778,9 +772,12 @@ export default function Schedule() {
                   {leaveTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
                 <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:1, color:'var(--gray-400)', marginBottom:6 }}>Date Range *</div>
-                <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:12 }}>
-                  <input type="date" value={leaveForm.date_from} onChange={e=>setLeaveForm(f=>({...f,date_from:e.target.value,date_to:f.date_to||e.target.value}))} style={{ padding:'7px 10px', borderRadius:7, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13 }}/>
-                  <input type="date" value={leaveForm.date_to} min={leaveForm.date_from} onChange={e=>setLeaveForm(f=>({...f,date_to:e.target.value}))} style={{ padding:'7px 10px', borderRadius:7, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13 }}/>
+                <div style={{ marginBottom:12 }}>
+                  <RangePickerInline
+                    dateFrom={leaveForm.date_from}
+                    dateTo={leaveForm.date_to}
+                    onChange={(from,to)=>setLeaveForm(f=>({...f,date_from:from,date_to:to}))}
+                  />
                 </div>
                 <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:1, color:'var(--gray-400)', marginBottom:6 }}>Half Day</div>
                 <select value={leaveForm.half_day} onChange={e=>setLeaveForm(f=>({...f,half_day:e.target.value}))} style={{ width:'100%', padding:'7px 10px', borderRadius:7, border:'1.5px solid var(--gray-200)', fontFamily:'inherit', fontSize:13, marginBottom:12 }}>
