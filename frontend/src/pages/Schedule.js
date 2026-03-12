@@ -37,6 +37,7 @@ export default function Schedule() {
   const [drawerAgents, setDrawerAgents] = useState([]);
   const [drawerForm, setDrawerForm] = useState({ start_time:'07:00', end_time:'15:00', date_from:'', date_to:'', status:'published', color:null, text_color:null });
   const [drawerSkipWeekends, setDrawerSkipWeekends] = useState(true); // matches Mon-Fri calendar mode
+  const [drawerReplace, setDrawerReplace] = useState(false);
   const [drawerSaving, setDrawerSaving] = useState(false);
   const [drawerMsg, setDrawerMsg] = useState('');
   // Templates tab
@@ -182,7 +183,8 @@ export default function Schedule() {
         shift_type: 'normal',
         notes: '',
         color: drawerForm.color || null,
-        text_color: drawerForm.text_color || null
+        text_color: drawerForm.text_color || null,
+        replace: drawerReplace,
       });
       await fetchData();
       setDrawerMsg('✓ Shifts assigned!');
@@ -1451,6 +1453,18 @@ export default function Schedule() {
               {drawerMsg && <div style={{ padding:'8px 12px', borderRadius:7, background:drawerMsg.startsWith('✓')?'#d1fae5':'#fef2f2', color:drawerMsg.startsWith('✓')?'#065f46':'#dc2626', fontSize:12, fontWeight:600 }}>{drawerMsg}</div>}
               <div style={{ fontSize:12, color:'var(--gray-400)' }}>{drawerAgents.length} agent{drawerAgents.length!==1?'s':''} selected</div>
               {drawerMode==='assign' && (
+                <div
+                  onClick={() => setDrawerReplace(r => !r)}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:8, border:`1.5px solid ${drawerReplace?'#f59e0b':'var(--gray-200)'}`, background:drawerReplace?'#fffbeb':'white', cursor:'pointer', userSelect:'none' }}>
+                  <div style={{ width:36, height:20, borderRadius:10, background:drawerReplace?'#f59e0b':'#d1d5db', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', flexShrink:0 }}>
+                    <div style={{ width:14, height:14, borderRadius:'50%', background:'white', transform:drawerReplace?'translateX(16px)':'translateX(0)', transition:'transform 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }}/>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:700, color:drawerReplace?'#92400e':'var(--gray-700)' }}>Replace existing shifts</div>
+                    <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:1 }}>{drawerReplace ? 'Existing shifts will be deleted first' : 'Existing shifts will be kept'}</div>
+                  </div>
+                </div>
+              )}
                 <button onClick={handleBulkAssign} disabled={drawerSaving||!drawerAgents.length} style={{ width:'100%', padding:'11px', borderRadius:8, border:'none', background:drawerAgents.length?'var(--red)':'var(--gray-200)', color:drawerAgents.length?'white':'var(--gray-500)', fontFamily:'inherit', fontSize:14, fontWeight:700, cursor:drawerAgents.length?'pointer':'not-allowed' }}>
                   {drawerSaving?'Assigning...':'Assign Shifts'}
                 </button>

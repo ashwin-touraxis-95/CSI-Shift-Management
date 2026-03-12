@@ -245,12 +245,13 @@ export default function HoursTracker() {
   const calcShiftAllowance = (agentId) => {
     const agent = users.find(u => u.id === agentId);
     if (!agent || (agent.location||'SA') !== 'SA' || agent.department !== 'CS') return 0;
-    const agentWeeks = weeks;
+    // Use CS-specific pay cycle window, not the full union of weeks
+    const csCycleDay = payCycleDays['CS'] || displayCycleDay;
+    const { pStart: csStart, pEnd: csEnd } = getPeriod(cycleAnchor, csCycleDay);
+    const csStartStr = format(csStart, 'yyyy-MM-dd');
+    const csEndStr   = format(csEnd,   'yyyy-MM-dd');
     let allowanceHrs = 0;
-    for (const week of agentWeeks) {
-      for (const day of week.days) {
-        const ds = format(day, 'yyyy-MM-dd');
-        for (const s of shifts.filter(s => s.user_id === agentId && s.date === ds)) {
+    for (const s of shifts.filter(s => s.user_id === agentId && s.date >= csStartStr && s.date <= csEndStr)) {
           const [sh, sm] = s.start_time.split(':').map(Number);
           const [eh, em] = s.end_time.split(':').map(Number);
           const startMins = sh * 60 + sm;
@@ -280,8 +281,6 @@ export default function HoursTracker() {
 
           allowanceHrs += mins / 60;
         }
-      }
-    }
     return Math.round(allowanceHrs * 10) / 10;
   };
 
@@ -828,16 +827,13 @@ export default function HoursTracker() {
               <tr style={{ background: headingColors.headerBg }}>
                 <th style={{ padding:'10px 14px', textAlign:'left', color: headingColors.headerText, fontSize:12, width:160, position:'sticky', left:0, background: headingColors.headerBg, zIndex:2, opacity:0.8 }}>Agent</th>
                 {weeks.map(w=>(
-                  <th key={w.start} colSpan={5} style={{ padding:'8px 6px', fontSize:11, fontWeight:700, color: headingColors.headerText, textAlign:'center',
+                  <th key={w.start} colSpan={6} style={{ padding:'8px 6px', fontSize:11, fontWeight:700, color: headingColors.headerText, textAlign:'center',
                     borderRight:'2px solid rgba(255,255,255,0.15)',
                     background: headingColors.headerBg }}>
                     Wk {getWeek(w.start)}<br/>
                     <span style={{ fontSize:9, opacity:0.6 }}>{format(w.start,'d MMM')}–{format(w.end,'d MMM')}</span>
                   </th>
                 ))}
-                <th colSpan={5} style={{ padding:'8px 6px', fontSize:11, fontWeight:700, color: headingColors.periodText, textAlign:'center', background: headingColors.periodBg }}>
-                  {format(pStart,'MMMM')} Total
-                </th>
               </tr>
               <tr style={{ background: headingColors.subHeaderBg }}>
                 <th style={{ padding:'5px 14px', textAlign:'left', color: headingColors.headerText, fontSize:10, position:'sticky', left:0, background: headingColors.subHeaderBg, zIndex:2, opacity:0.7 }}>Name</th>
@@ -849,19 +845,11 @@ export default function HoursTracker() {
                       ['OT2',   'ot2'],
                       ['Leave', 'leave'],
                       ['Total', 'total'],
+                      ['Allow', 'total'],
                     ].map(([l,k])=>(
-                      <th key={l} style={{ padding:'4px 4px', fontSize:9, fontWeight:700, color: headingColors[k], textAlign:'center', background:'rgba(255,255,255,0.05)', borderRight:'1px solid rgba(255,255,255,0.08)', minWidth:44 }}>{l}</th>
+                      <th key={l} style={{ padding:'4px 4px', fontSize:9, fontWeight:700, color: l==='Allow'?'#67e8f9':headingColors[k], textAlign:'center', background: l==='Allow'?'rgba(103,232,249,0.08)':'rgba(255,255,255,0.05)', borderRight:'1px solid rgba(255,255,255,0.08)', minWidth:44 }}>{l}</th>
                     ))}
                   </React.Fragment>
-                ))}
-                {[
-                  ['Norm',   'norm'],
-                  ['OT1.5',  'ot15'],
-                  ['OT2',    'ot2'],
-                  ['Leave',  'leave'],
-                  ['Worked', 'total'],
-                ].map(([l,k])=>(
-                  <th key={`m-${l}`} style={{ padding:'4px 4px', fontSize:9, fontWeight:700, color: headingColors[k], textAlign:'center', background:'rgba(192,57,43,0.25)', borderRight:'1px solid rgba(255,255,255,0.08)', minWidth:44 }}>{l}</th>
                 ))}
               </tr>
             </thead>
@@ -875,7 +863,7 @@ export default function HoursTracker() {
                       {(() => {
                         const { pStart:ds, pEnd:de } = getDeptPeriod(dept.name);
                         const dWeeks = getDeptWeeks(dept.name);
-                        return <td colSpan={5*dWeeks.length+6} style={{ padding:'6px 14px', background:dept.bg_color||'#f1f5f9', fontWeight:700, fontSize:11, color:dept.color||'#334155', letterSpacing:0.5 }}>
+                        return <td colSpan={6*dWeeks.length+1} style={{ padding:'6px 14px', background:dept.bg_color||'#f1f5f9', fontWeight:700, fontSize:11, color:dept.color||'#334155', letterSpacing:0.5 }}>
                           {dept.name}
                           <span style={{ marginLeft:10, fontWeight:400, fontSize:11, opacity:0.8 }}>
                             📅 {format(ds,'d MMM')} – {format(de,'d MMM yyyy')}
@@ -885,20 +873,10 @@ export default function HoursTracker() {
                     </tr>
                     {dagents.map((agent,i) => {
                       const deptWks = getDeptWeeks(dept.name);
-                    const month = (() => {
-                      let normal=0,ot1=0,ot15=0,ot2=0,leave=0;
-                      for (const week of deptWks) {
-                        const d = getAgentWeekData(agent.id,week,agent.location||'SA');
-                        normal+=d.normal; ot1+=d.ot1; ot15+=d.ot15; ot2+=d.ot2; leave+=d.leave;
-                      }
-                      const worked=Math.round((normal+ot1+ot15+ot2)*10)/10;
-                      const total=Math.round((worked+leave)*10)/10;
-                      return { normal:Math.round(normal*10)/10, ot1:Math.round(ot1*10)/10, ot15:Math.round(ot15*10)/10, ot2:Math.round(ot2*10)/10, leave:Math.round(leave*10)/10, worked, total, balance:Math.round((total-normal-ot1-ot15-ot2-leave)*10)/10 };
-                    })();
-                      const diff = Math.round((month.worked - (hoursTargets[dept.name]||160))*10)/10;
-                      const diffColor = diff>=0?'#16a34a':'#dc2626';
                       const isPHAgentW = (agent.location || 'SA') !== 'SA';
                       const wRowBg = isPHAgentW ? '#f0f4ff' : i%2===0?'white':'#f8fafc';
+                      // Per-week allowance: only for SA CS agents
+                      const isAllowanceAgent = !isPHAgentW && agent.department === 'CS';
                       return (
                         <tr key={agent.id} style={{ background:wRowBg, borderBottom:'1px solid #f1f5f9', opacity: isPHAgentW?0.85:1 }}>
                           <td style={{ padding:'8px 14px', fontWeight:600, whiteSpace:'nowrap', position:'sticky', left:0, background:wRowBg, zIndex:1 }}>
@@ -912,6 +890,25 @@ export default function HoursTracker() {
                           </td>
                           {getDeptWeeks(dept.name).map(week=>{
                             const d = getAgentWeekData(agent.id, week, agent.location || 'SA');
+                            // Per-week allowance: hours in 18:00–06:00 window for this week's days only
+                            const weekAllowance = (() => {
+                              if (!isAllowanceAgent) return null;
+                              const winStart = 18*60, winEnd = 30*60;
+                              const overlap = (a1,a2,b1,b2) => Math.max(0,Math.min(a2,b2)-Math.max(a1,b1));
+                              let hrs = 0;
+                              const dayStrs = week.days.map(dy => `${dy.getFullYear()}-${String(dy.getMonth()+1).padStart(2,'0')}-${String(dy.getDate()).padStart(2,'0')}`);
+                              for (const s of shifts.filter(s => s.user_id === agent.id && dayStrs.includes(s.date))) {
+                                const [sh,sm] = s.start_time.split(':').map(Number);
+                                const [eh,em] = s.end_time.split(':').map(Number);
+                                const stM = sh*60+sm;
+                                let enM = eh*60+em;
+                                if (enM <= stM) enM += 1440;
+                                let mins = overlap(stM, enM, winStart, winEnd);
+                                if (stM < 6*60) mins += overlap(stM+1440, enM+1440, winStart, winEnd);
+                                hrs += mins/60;
+                              }
+                              return Math.round(hrs*10)/10 || null;
+                            })();
                             return (
                               <React.Fragment key={week.start}>
                                 <Cell val={d.normal||null} bg={hc.normal.bg} color={hc.normal.text}/>
@@ -919,14 +916,10 @@ export default function HoursTracker() {
                                 <Cell val={d.ot2||null} bg={hc.ot2.bg} color={hc.ot2.text}/>
                                 <Cell val={d.leave?`(${d.leave})`:null} bg={hc.leave.bg} color={hc.leave.text}/>
                                 <Cell val={d.total||null} bg='#f8fafc' color='#1a1a2e' bold right/>
+                                <Cell val={weekAllowance} bg='rgba(103,232,249,0.07)' color='#0891b2' bold/>
                               </React.Fragment>
                             );
                           })}
-                          <Cell val={month.normal||null} bg={hc.normal.bg} color={hc.normal.text} bold/>
-                          <Cell val={month.ot15||null} bg={hc.ot15.bg} color={hc.ot15.text} bold/>
-                          <Cell val={month.ot2||null} bg={hc.ot2.bg} color={hc.ot2.text} bold/>
-                          <Cell val={month.leave||null} bg={hc.leave.bg} color={hc.leave.text} bold/>
-                          <td style={{ padding:'6px 8px', textAlign:'center', fontWeight:800, fontSize:13, background:'#f1f5f9', color:'#1a1a2e' }}>{month.total||'—'}</td>
                         </tr>
                       );
                     })}
@@ -934,7 +927,7 @@ export default function HoursTracker() {
                 );
               })}
               {visibleDepts.every(d=>getAgentsForDept(d.name).length===0) && (
-                <tr><td colSpan={5*weeks.length+8} style={{ padding:40, textAlign:'center', color:'var(--gray-400)' }}>No agents match the current filter</td></tr>
+                <tr><td colSpan={6*weeks.length+2} style={{ padding:40, textAlign:'center', color:'var(--gray-400)' }}>No agents match the current filter</td></tr>
               )}
             </tbody>
           </table>

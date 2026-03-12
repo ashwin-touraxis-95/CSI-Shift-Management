@@ -532,7 +532,7 @@ app.post('/api/shifts', requireAuth, requirePerm('manage_shifts'), async (req, r
   res.json({ id, ok: true });
 });
 app.post('/api/shifts/bulk', requireAuth, requirePerm('manage_shifts'), async (req, res) => {
-  const { user_ids, dates, start_time, end_time, notes, status='published', shift_type='normal', color=null, text_color=null } = req.body;
+  const { user_ids, dates, start_time, end_time, notes, status='published', shift_type='normal', color=null, text_color=null, replace=false } = req.body;
   const canPublish = req.user.user_type==='account_admin'||req.perms?.publish_shifts;
   let count = 0;
   let skipped = 0;
@@ -541,7 +541,13 @@ app.post('/api/shifts/bulk', requireAuth, requirePerm('manage_shifts'), async (r
     const department = agent?.department || 'CS';
     for (const date of dates) {
       const existing = await get('SELECT id FROM shifts WHERE user_id=$1 AND date=$2', [uid, date]);
-      if (existing) { skipped++; continue; }
+      if (existing) {
+        if (replace) {
+          await run('DELETE FROM shifts WHERE user_id=$1 AND date=$2', [uid, date]);
+        } else {
+          skipped++; continue;
+        }
+      }
       await run('INSERT INTO shifts(id,user_id,date,start_time,end_time,department,notes,status,shift_type,created_by,color,text_color) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
         [uuidv4(),uid,date,start_time,end_time,department,notes,canPublish?status:'draft',shift_type,req.session.userId,color||null,text_color||null]);
       count++;
