@@ -119,10 +119,6 @@ export default function ClockLogs() {
     }
     return days;
   };
-      d.setDate(d.getDate() + 1);
-    }
-    return days;
-  };
 
   const clockGroups = groupByAgent(filteredLogs);
   const breakGroups = groupByAgent(filteredBreaks);
