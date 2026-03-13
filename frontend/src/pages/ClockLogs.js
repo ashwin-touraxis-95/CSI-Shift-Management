@@ -99,8 +99,30 @@ export default function ClockLogs() {
 
   const filteredLogs = logs.filter(l => !filterDept || l.department === filterDept);
   const filteredBreaks = breakLogs.filter(l => !filterDept || l.department === filterDept);
-  const filteredLeave = leaveData.filter(l => !filterDept || l.user_department === filterDept)
+
+  const filteredLeave = leaveData
+    .filter(l => !filterDept || l.user_department === filterDept)
     .filter(l => !filterUser || l.user_id === filterUser);
+
+  // Count days for a leave record: half_day = 0.5, otherwise count weekdays between date_from and date_to
+  const countLeaveDays = (l) => {
+    if (l.half_day && l.half_day !== '') return 0.5;
+    if (!l.date_from || !l.date_to) return 1;
+    const from = new Date(l.date_from + 'T00:00');
+    const to = new Date(l.date_to + 'T00:00');
+    let days = 0;
+    const d = new Date(from);
+    while (d <= to) {
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) days++;
+      d.setDate(d.getDate() + 1);
+    }
+    return days;
+  };
+      d.setDate(d.getDate() + 1);
+    }
+    return days;
+  };
 
   const clockGroups = groupByAgent(filteredLogs);
   const breakGroups = groupByAgent(filteredBreaks);
@@ -264,25 +286,44 @@ export default function ClockLogs() {
           </div>
           {leaveGroups.map(group => {
             const isOpen = !!expandedAgents[group.name];
+
+            // Per-category totals
+            const categoryTotals = {};
+            group.entries.forEach(l => {
+              const key = l.leave_type_name || 'Unknown';
+              const lt = leaveTypes.find(t => String(t.id)===String(l.leave_type_id));
+              if (!categoryTotals[key]) categoryTotals[key] = { days: 0, color: lt?.color||'#6366f1', bg: lt?.bg_color||'#ede9fe' };
+              categoryTotals[key].days += countLeaveDays(l);
+            });
+
             return (
           <div key={group.name} className="card" style={{ marginBottom:10, overflow:'hidden' }}>
-            <div onClick={()=>toggleAgent(group.name)} style={{ padding:'10px 16px', background:'var(--gray-50)', display:'flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none' }}>
+            <div onClick={()=>toggleAgent(group.name)} style={{ padding:'10px 16px', background:'var(--gray-50)', display:'flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none', flexWrap:'wrap' }}>
               <div style={{ width:28, height:28, borderRadius:'50%', background:'#6366f1', color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:12, flexShrink:0 }}>{group.name?.[0]?.toUpperCase()}</div>
               <div style={{ fontWeight:700, fontSize:14 }}>{group.name}</div>
               <span style={{ fontSize:12, color:'var(--gray-500)', marginLeft:4 }}>{group.department}</span>
-              <span style={{ marginLeft:'auto', fontSize:12, color:'var(--gray-400)' }}>{group.entries.length} record{group.entries.length===1?'':'s'}</span>
+              {/* Per-category totals chips */}
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginLeft:8 }}>
+                {Object.entries(categoryTotals).map(([name, { days, color, bg }]) => (
+                  <span key={name} style={{ padding:'2px 9px', borderRadius:20, fontSize:11, fontWeight:700, background:bg, color, whiteSpace:'nowrap' }}>
+                    {name}: {days} day{days !== 1 ? 's' : ''}
+                  </span>
+                ))}
+              </div>
+              <span style={{ marginLeft:'auto', fontSize:12, color:'var(--gray-400)', flexShrink:0 }}>{group.entries.length} record{group.entries.length===1?'':'s'}</span>
               <span style={{ fontSize:12, color:'var(--gray-400)', marginLeft:8 }}>{isOpen ? '▲' : '▼'}</span>
             </div>
             {isOpen && (
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
               <thead><tr style={{ borderBottom:'1px solid var(--gray-200)' }}>
-                {['Leave Type','From','To','Half Day','Notes'].map(h=>(
+                {['Leave Type','From','To','Days','Half Day','Notes'].map(h=>(
                   <th key={h} style={{ padding:'8px 16px', textAlign:'left', fontWeight:600, fontSize:11, color:'var(--gray-500)', textTransform:'uppercase' }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
                 {group.entries.map(l => {
                   const lt = leaveTypes.find(t => String(t.id)===String(l.leave_type_id));
+                  const days = countLeaveDays(l);
                   return (
                     <tr key={l.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
                       <td style={{ padding:'10px 16px' }}>
@@ -290,6 +331,7 @@ export default function ClockLogs() {
                       </td>
                       <td style={{ padding:'10px 16px', fontFamily:'DM Mono', fontSize:12 }}>{l.date_from?.slice(0,10)||'—'}</td>
                       <td style={{ padding:'10px 16px', fontFamily:'DM Mono', fontSize:12 }}>{l.date_to?.slice(0,10)||'—'}</td>
+                      <td style={{ padding:'10px 16px', fontWeight:700, fontSize:13 }}>{days}</td>
                       <td style={{ padding:'10px 16px', color:'var(--gray-500)', fontSize:12 }}>{l.half_day||'—'}</td>
                       <td style={{ padding:'10px 16px', color:'var(--gray-500)', fontSize:12 }}>{l.notes||'—'}</td>
                     </tr>

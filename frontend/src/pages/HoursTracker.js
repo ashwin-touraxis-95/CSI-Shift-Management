@@ -241,47 +241,38 @@ export default function HoursTracker() {
     return Math.round((mins/60)*10)/10;
   };
 
-  // Shift allowance: SA + CS only — hours worked between 18:00 and 06:00
+  // Returns allowance hours for a single shift if ≥50% of its duration falls after 18:00 (or before 06:00)
+  const shiftAllowanceMins = (start_time, end_time) => {
+    const [sh, sm] = start_time.split(':').map(Number);
+    const [eh, em] = end_time.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    let endMins = eh * 60 + em;
+    if (endMins <= startMins) endMins += 1440; // overnight
+    const totalMins = endMins - startMins;
+    const winStart = 18 * 60;       // 1080
+    const winEnd   = (24 + 6) * 60; // 1800 (06:00 next day)
+    const overlap = (a1, a2, b1, b2) => Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
+    let inWindow = overlap(startMins, endMins, winStart, winEnd);
+    // Handle early morning shifts like 00:00–06:00 which sit in [0,360] → map to [1440,1800]
+    if (startMins < 6 * 60) inWindow += overlap(startMins + 1440, endMins + 1440, winStart, winEnd);
+    // Only qualify if ≥50% of shift is in the allowance window
+    if (inWindow / totalMins < 0.5) return 0;
+    return inWindow;
+  };
+
+  // Shift allowance: SA + CS only — hours worked between 18:00 and 06:00, only if ≥50% of shift qualifies
   const calcShiftAllowance = (agentId) => {
     const agent = users.find(u => u.id === agentId);
     if (!agent || (agent.location||'SA') !== 'SA' || agent.department !== 'CS') return 0;
-    // Use CS-specific pay cycle window, not the full union of weeks
     const csCycleDay = payCycleDays['CS'] || displayCycleDay;
     const { pStart: csStart, pEnd: csEnd } = getPeriod(cycleAnchor, csCycleDay);
     const csStartStr = format(csStart, 'yyyy-MM-dd');
     const csEndStr   = format(csEnd,   'yyyy-MM-dd');
-    let allowanceHrs = 0;
+    let allowanceMins = 0;
     for (const s of shifts.filter(s => s.user_id === agentId && s.date >= csStartStr && s.date <= csEndStr)) {
-          const [sh, sm] = s.start_time.split(':').map(Number);
-          const [eh, em] = s.end_time.split(':').map(Number);
-          const startMins = sh * 60 + sm;
-          let endMins = eh * 60 + em;
-          if (endMins <= startMins) endMins += 24 * 60; // overnight shift
-
-          // Allowance window: 18:00 (1080) to 06:00 next day (1800+360=1800? no: 18*60=1080 to 30*60=1800)
-          // Represent as two windows to handle overnight:
-          // Window A: 1080 to 1440 (18:00–midnight)
-          // Window B: 1440 to 1800 (midnight–06:00, i.e. 0–6 in next-day mins offset by 1440)
-          const winStart = 18 * 60;       // 1080
-          const winEnd   = (24 + 6) * 60; // 1800
-
-          // Normalise shift into same 24h+ space
-          // shift already has endMins >= startMins (overnight added 1440)
-          // But startMins may be < winStart, or end may wrap further
-          // We need to check overlap of [startMins, endMins] with [winStart, winEnd]
-          // and also [startMins + 1440, endMins + 1440] in case shift is early morning
-          const overlap = (a1, a2, b1, b2) => Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
-
-          let mins = overlap(startMins, endMins, winStart, winEnd);
-          // Also cover case where a morning shift (e.g. 00:00–06:00) sits in [0,360]
-          // which maps to [1440, 1800] in our window
-          if (startMins < 6 * 60) {
-            mins += overlap(startMins + 1440, endMins + 1440, winStart, winEnd);
-          }
-
-          allowanceHrs += mins / 60;
-        }
-    return Math.round(allowanceHrs * 10) / 10;
+      allowanceMins += shiftAllowanceMins(s.start_time, s.end_time);
+    }
+    return Math.round((allowanceMins / 60) * 10) / 10;
   };
 
   const getAgentWeekData = (agentId, week, agentLocation) => {
@@ -828,7 +819,7 @@ export default function HoursTracker() {
                 <th style={{ padding:'10px 14px', textAlign:'left', color: headingColors.headerText, fontSize:12, width:160, position:'sticky', left:0, background: headingColors.headerBg, zIndex:2, opacity:0.8 }}>Agent</th>
                 {weeks.map(w=>(
                   <th key={w.start} colSpan={6} style={{ padding:'8px 6px', fontSize:11, fontWeight:700, color: headingColors.headerText, textAlign:'center',
-                    borderRight:'2px solid rgba(255,255,255,0.15)',
+                    borderRight:'3px solid rgba(255,255,255,0.3)',
                     background: headingColors.headerBg }}>
                     Wk {getWeek(w.start)}<br/>
                     <span style={{ fontSize:9, opacity:0.6 }}>{format(w.start,'d MMM')}–{format(w.end,'d MMM')}</span>
@@ -847,7 +838,7 @@ export default function HoursTracker() {
                       ['Total', 'total'],
                       ['Allow', 'total'],
                     ].map(([l,k])=>(
-                      <th key={l} style={{ padding:'4px 4px', fontSize:9, fontWeight:700, color: l==='Allow'?'#67e8f9':headingColors[k], textAlign:'center', background: l==='Allow'?'rgba(103,232,249,0.08)':'rgba(255,255,255,0.05)', borderRight:'1px solid rgba(255,255,255,0.08)', minWidth:44 }}>{l}</th>
+                      <th key={l} style={{ padding:'4px 4px', fontSize:9, fontWeight:700, color: l==='Allow'?'#67e8f9':headingColors[k], textAlign:'center', background: l==='Allow'?'rgba(103,232,249,0.08)':'rgba(255,255,255,0.05)', borderRight: l==='Allow'?'3px solid rgba(255,255,255,0.4)':'1px solid rgba(255,255,255,0.08)', minWidth:44 }}>{l}</th>
                     ))}
                   </React.Fragment>
                 ))}
@@ -893,21 +884,12 @@ export default function HoursTracker() {
                             // Per-week allowance: hours in 18:00–06:00 window for this week's days only
                             const weekAllowance = (() => {
                               if (!isAllowanceAgent) return null;
-                              const winStart = 18*60, winEnd = 30*60;
-                              const overlap = (a1,a2,b1,b2) => Math.max(0,Math.min(a2,b2)-Math.max(a1,b1));
-                              let hrs = 0;
                               const dayStrs = week.days.map(dy => `${dy.getFullYear()}-${String(dy.getMonth()+1).padStart(2,'0')}-${String(dy.getDate()).padStart(2,'0')}`);
+                              let mins = 0;
                               for (const s of shifts.filter(s => s.user_id === agent.id && dayStrs.includes(s.date))) {
-                                const [sh,sm] = s.start_time.split(':').map(Number);
-                                const [eh,em] = s.end_time.split(':').map(Number);
-                                const stM = sh*60+sm;
-                                let enM = eh*60+em;
-                                if (enM <= stM) enM += 1440;
-                                let mins = overlap(stM, enM, winStart, winEnd);
-                                if (stM < 6*60) mins += overlap(stM+1440, enM+1440, winStart, winEnd);
-                                hrs += mins/60;
+                                mins += shiftAllowanceMins(s.start_time, s.end_time);
                               }
-                              return Math.round(hrs*10)/10 || null;
+                              return Math.round((mins/60)*10)/10 || null;
                             })();
                             return (
                               <React.Fragment key={week.start}>
@@ -916,7 +898,7 @@ export default function HoursTracker() {
                                 <Cell val={d.ot2||null} bg={hc.ot2.bg} color={hc.ot2.text}/>
                                 <Cell val={d.leave?`(${d.leave})`:null} bg={hc.leave.bg} color={hc.leave.text}/>
                                 <Cell val={d.total||null} bg='#f8fafc' color='#1a1a2e' bold right/>
-                                <Cell val={weekAllowance} bg='rgba(103,232,249,0.07)' color='#0891b2' bold/>
+                                <td style={{ padding:'6px 8px', textAlign:'center', fontWeight:700, fontSize:12, background:'rgba(103,232,249,0.07)', color:'#0891b2', borderRight:'3px solid #1a1a2e', minWidth:44 }}>{weekAllowance ?? '—'}</td>
                               </React.Fragment>
                             );
                           })}

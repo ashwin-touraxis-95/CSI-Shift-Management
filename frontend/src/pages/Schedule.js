@@ -38,6 +38,7 @@ export default function Schedule() {
   const [drawerForm, setDrawerForm] = useState({ start_time:'07:00', end_time:'15:00', date_from:'', date_to:'', status:'published', color:null, text_color:null });
   const [drawerSkipWeekends, setDrawerSkipWeekends] = useState(true); // matches Mon-Fri calendar mode
   const [drawerReplace, setDrawerReplace] = useState(false);
+  const [drawerSubMode, setDrawerSubMode] = useState('assign'); // 'assign' | 'replace' | 'remove'
   const [drawerSaving, setDrawerSaving] = useState(false);
   const [drawerMsg, setDrawerMsg] = useState('');
   // Templates tab
@@ -184,7 +185,7 @@ export default function Schedule() {
         notes: '',
         color: drawerForm.color || null,
         text_color: drawerForm.text_color || null,
-        replace: drawerReplace,
+        replace: drawerSubMode === 'replace',
       });
       await fetchData();
       setDrawerMsg('✓ Shifts assigned!');
@@ -818,8 +819,7 @@ export default function Schedule() {
         {pageTab === 'schedule' && (
           <div style={{ display:'flex', gap:6, paddingBottom:2 }}>
             {[
-              { mode:'assign', label:'✏️ Assign Shifts' },
-              { mode:'remove', label:'🗑 Remove Shifts' },
+              { mode:'assign', label:'✏️ Manage Shifts' },
               { mode:'leave',  label:'🏖️ Submit Leave'  },
             ].map(btn => {
               const isActive = drawerOpen && drawerMode===btn.mode;
@@ -1350,11 +1350,30 @@ export default function Schedule() {
         <div style={{ position:'fixed', top:0, right:0, bottom:0, width:440, background:'white', borderLeft:'2px solid var(--gray-200)', boxShadow:'-6px 0 32px rgba(0,0,0,0.12)', zIndex:300, display:'flex', flexDirection:'column', overflowY:'auto' }}>
 
           {/* Drawer Header */}
-          <div style={{ padding:'20px 20px 14px', borderBottom:'2px solid var(--gray-100)', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, position:'sticky', top:0, background:'white', zIndex:1 }}>
-            <div style={{ fontWeight:800, fontSize:16, color:'var(--gray-900)' }}>
-              {drawerMode==='assign'?'✏️ Assign Shifts':drawerMode==='remove'?'🗑 Remove Shifts':'🏖️ Submit Leave'}
+          <div style={{ padding:'16px 20px 0', borderBottom:'2px solid var(--gray-100)', flexShrink:0, position:'sticky', top:0, background:'white', zIndex:1 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+              <div style={{ fontWeight:800, fontSize:16, color:'var(--gray-900)' }}>
+                {drawerMode==='assign' ? '✏️ Manage Shifts' : '🏖️ Submit Leave'}
+              </div>
+              <button onClick={()=>setDrawerOpen(false)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--gray-400)', padding:4, lineHeight:1 }}>✕</button>
             </div>
-            <button onClick={()=>setDrawerOpen(false)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--gray-400)', padding:4, lineHeight:1 }}>✕</button>
+            {/* Sub-mode tabs for Manage Shifts */}
+            {drawerMode==='assign' && (
+              <div style={{ display:'flex', gap:0, marginBottom:0 }}>
+                {[
+                  { key:'assign',  label:'Assign' },
+                  { key:'replace', label:'Replace' },
+                  { key:'remove',  label:'Remove' },
+                ].map(tab => (
+                  <button key={tab.key} onClick={()=>{ setDrawerSubMode(tab.key); setDrawerMsg(''); }} style={{
+                    flex:1, padding:'8px 4px', border:'none', borderBottom: drawerSubMode===tab.key ? '3px solid var(--red)' : '3px solid transparent',
+                    background:'transparent', fontFamily:'inherit', fontSize:13, fontWeight: drawerSubMode===tab.key ? 700 : 500,
+                    color: drawerSubMode===tab.key ? 'var(--red)' : 'var(--gray-500)', cursor:'pointer',
+                    transition:'all 0.15s',
+                  }}>{tab.label}</button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Drawer Body */}
@@ -1382,7 +1401,7 @@ export default function Schedule() {
             </div>
 
             {/* SHIFT TIME + TEMPLATES */}
-            {drawerMode !== 'leave' && (
+            {drawerMode !== 'leave' && drawerSubMode !== 'remove' && (
               <div>
                 <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:1, color:'var(--gray-400)', marginBottom:8 }}>Shift Time</div>
                 <div style={{ display:'flex', gap:8, marginBottom:10, alignItems:'center' }}>
@@ -1401,13 +1420,11 @@ export default function Schedule() {
                     ))}
                   </div>
                 )}
-                {drawerMode === 'assign' && (
-                  <div style={{ display:'flex', gap:6 }}>
-                    {['published','draft'].map(s=>(
-                      <button key={s} onClick={()=>setDrawerForm(f=>({...f,status:s}))} style={{ flex:1, padding:'6px', borderRadius:7, border:`1.5px solid ${drawerForm.status===s?'var(--red)':'var(--gray-200)'}`, background:drawerForm.status===s?'#fef2f2':'white', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', color:drawerForm.status===s?'var(--red)':'var(--gray-600)', textTransform:'capitalize' }}>{s}</button>
-                    ))}
-                  </div>
-                )}
+                <div style={{ display:'flex', gap:6 }}>
+                  {['published','draft'].map(s=>(
+                    <button key={s} onClick={()=>setDrawerForm(f=>({...f,status:s}))} style={{ flex:1, padding:'6px', borderRadius:7, border:`1.5px solid ${drawerForm.status===s?'var(--red)':'var(--gray-200)'}`, background:drawerForm.status===s?'#fef2f2':'white', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', color:drawerForm.status===s?'var(--red)':'var(--gray-600)', textTransform:'capitalize' }}>{s}</button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1452,24 +1469,12 @@ export default function Schedule() {
             <div style={{ marginTop:'auto', paddingTop:16, borderTop:'1px solid var(--gray-100)', display:'flex', flexDirection:'column', gap:8 }}>
               {drawerMsg && <div style={{ padding:'8px 12px', borderRadius:7, background:drawerMsg.startsWith('✓')?'#d1fae5':'#fef2f2', color:drawerMsg.startsWith('✓')?'#065f46':'#dc2626', fontSize:12, fontWeight:600 }}>{drawerMsg}</div>}
               <div style={{ fontSize:12, color:'var(--gray-400)' }}>{drawerAgents.length} agent{drawerAgents.length!==1?'s':''} selected</div>
-              {drawerMode==='assign' && (
-                <div
-                  onClick={() => setDrawerReplace(r => !r)}
-                  style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:8, border:`1.5px solid ${drawerReplace?'#f59e0b':'var(--gray-200)'}`, background:drawerReplace?'#fffbeb':'white', cursor:'pointer', userSelect:'none' }}>
-                  <div style={{ width:36, height:20, borderRadius:10, background:drawerReplace?'#f59e0b':'#d1d5db', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', flexShrink:0 }}>
-                    <div style={{ width:14, height:14, borderRadius:'50%', background:'white', transform:drawerReplace?'translateX(16px)':'translateX(0)', transition:'transform 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }}/>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:12, fontWeight:700, color:drawerReplace?'#92400e':'var(--gray-700)' }}>Replace existing shifts</div>
-                    <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:1 }}>{drawerReplace ? 'Existing shifts will be deleted first' : 'Existing shifts will be kept'}</div>
-                  </div>
-                </div>
-              )}
-                <button onClick={handleBulkAssign} disabled={drawerSaving||!drawerAgents.length} style={{ width:'100%', padding:'11px', borderRadius:8, border:'none', background:drawerAgents.length?'var(--red)':'var(--gray-200)', color:drawerAgents.length?'white':'var(--gray-500)', fontFamily:'inherit', fontSize:14, fontWeight:700, cursor:drawerAgents.length?'pointer':'not-allowed' }}>
-                  {drawerSaving?'Assigning...':'Assign Shifts'}
+              {drawerMode==='assign' && drawerSubMode !== 'remove' && (
+                <button onClick={handleBulkAssign} disabled={drawerSaving||!drawerAgents.length} style={{ width:'100%', padding:'11px', borderRadius:8, border:'none', background:drawerAgents.length?(drawerSubMode==='replace'?'#b45309':'var(--red)'):'var(--gray-200)', color:drawerAgents.length?'white':'var(--gray-500)', fontFamily:'inherit', fontSize:14, fontWeight:700, cursor:drawerAgents.length?'pointer':'not-allowed' }}>
+                  {drawerSaving ? (drawerSubMode==='replace'?'Replacing...':'Assigning...') : (drawerSubMode==='replace'?'Replace Shifts':'Assign Shifts')}
                 </button>
               )}
-              {drawerMode==='remove' && (
+              {drawerMode==='assign' && drawerSubMode === 'remove' && (
                 <button onClick={handleBulkRemove} disabled={drawerSaving||!drawerAgents.length} style={{ width:'100%', padding:'11px', borderRadius:8, border:'none', background:drawerAgents.length?'#991b1b':'var(--gray-200)', color:drawerAgents.length?'white':'var(--gray-500)', fontFamily:'inherit', fontSize:14, fontWeight:700, cursor:drawerAgents.length?'pointer':'not-allowed' }}>
                   {drawerSaving?'Removing...':'Remove Shifts'}
                 </button>
